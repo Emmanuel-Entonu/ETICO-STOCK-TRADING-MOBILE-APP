@@ -1,20 +1,18 @@
 import { create } from 'zustand'
 import {
-  getClientPositions,
-  getMarketData,
-  getAccountById,
-  placeOrder,
-  cancelOrder,
-  listOrders,
-  listFills,
-  type PacPosition,
-  type PacMarketData,
-  type PacAccount,
-  type PacOrderRequest,
-  type PacOrderListItem,
-  type PacOrderFill,
-} from '../lib/pacApi'
+  getClientPositions, getMarketData, getAccountById, placeOrder as pacPlaceOrder,
+  cancelOrder as pacCancelOrder, listOrders, listFills,
+  type PacPosition, type PacMarketData, type PacAccount,
+  type PacOrderRequest, type PacOrderListItem, type PacOrderFill,
+} from '@/lib/pacApi'
+import { supabase } from '@/lib/supabase'
+import { cacheGet, cacheSet, cacheClear, TTL } from '@/lib/cache'
 import { useAuthStore } from './authStore'
+
+// SWR pattern: paint whatever we have cached (if not too stale), then
+// fetch fresh in the background. Cuts perceived load time on every screen
+// that reads market/positions/account/orders from "empty until network
+// resolves" to "instant with a soft refresh."
 
 interface PortfolioState {
   apiStatus: string | null
@@ -31,28 +29,16 @@ interface PortfolioState {
   orderFills: Record<string, PacOrderFill[]>
   loadingFillsId: string | null
 
-  wsConnected: boolean
-
   loadAccount: (accountId: string) => Promise<void>
   loadPositions: (accountId: string) => Promise<void>
   loadMarketData: () => Promise<void>
   loadOrders: (accountId: string) => Promise<void>
   loadFills: (orderId: string) => Promise<void>
-  placeOrder: (order: PacOrderRequest) => Promise<void>
+  placeOrder: (order: PacOrderRequest, idempotencyKey?: string) => Promise<void>
   cancelOrder: (pacOrderId: string, supabaseOrderId: string | null) => Promise<void>
   clearOrderResult: () => void
-  startLivePrices: () => void
-  stopLivePrices: () => void
-
-  get totalValue(): number
-  get totalPnL(): number
-  get totalPnLPercent(): number
+  reset: () => void
 }
-
-// Module-level WebSocket state — lives outside Zustand so it survives re-renders
-let _ws: WebSocket | null = null
-let _wsReconnect: ReturnType<typeof setTimeout> | null = null
-let _wsStopped = false
 
 export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   account: null,
@@ -67,33 +53,31 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   orderLoading: false,
   orderResult: null,
   apiStatus: null,
-  wsConnected: false,
-
-  get totalValue() {
-    return get().positions.reduce((sum, p) => sum + p.marketValue, 0)
-  },
-  get totalPnL() {
-    return get().positions.reduce((sum, p) => sum + p.unrealizedPnL, 0)
-  },
-  get totalPnLPercent() {
-    const cost = get().positions.reduce(
-      (sum, p) => sum + p.averageCost * p.quantity,
-      0
-    )
-    if (cost === 0) return 0
-    return (get().totalPnL / cost) * 100
-  },
 
   loadAccount: async (accountId) => {
-    try {
-      const account = await getAccountById(accountId)
-      set({ account })
-    } catch (e) {
-      console.error('loadAccount error:', e)
+    // Cache-first: paint any cached balance for this account, then refresh.
+    if (!get().account) {
+      const cached = await cacheGet<PacAccount>(`account.${accountId}`, TTL.account)
+      if (cached && !get().account) set({ account: cached })
     }
+    try {
+      const fresh = await getAccountById(accountId)
+      set({ account: fresh })
+      cacheSet(`account.${accountId}`, fresh)
+    } catch (e) { console.error('loadAccount error:', e) }
   },
 
   loadPositions: async (accountId) => {
+    // Paint stale positions + account immediately so Holdings tab isn't
+    // empty during the network round-trip.
+    if (get().positions.length === 0) {
+      const cached = await cacheGet<PacPosition[]>(`positions.${accountId}`, TTL.positions)
+      if (cached && get().positions.length === 0) set({ positions: cached })
+    }
+    if (!get().account) {
+      const cachedAcct = await cacheGet<PacAccount>(`account.${accountId}`, TTL.account)
+      if (cachedAcct && !get().account) set({ account: cachedAcct })
+    }
     set({ loadingPortfolio: true, apiStatus: null })
     const [positions, account] = await Promise.allSettled([
       getClientPositions(accountId),
@@ -101,31 +85,36 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     ])
     if (positions.status === 'fulfilled') {
       set({ positions: positions.value })
+      cacheSet(`positions.${accountId}`, positions.value)
     } else {
       const msg = (positions.reason as Error)?.message ?? String(positions.reason)
-      console.error('loadPositions error:', msg)
-      // 404 = new account with no trading history — show empty, no error banner
       if (!msg.includes('404') && !msg.toLowerCase().includes('not found')) {
-        set({ positions: [], apiStatus: `ERROR: ${msg}` })
-      } else {
-        set({ positions: [] })
-      }
+        set({ apiStatus: `ERROR: ${msg}` })
+        // Keep whatever we painted from cache; don't wipe to [] on transient errors.
+      } else set({ positions: [] })
     }
-    if (account.status === 'fulfilled') set({ account: account.value })
+    if (account.status === 'fulfilled') {
+      set({ account: account.value })
+      cacheSet(`account.${accountId}`, account.value)
+    }
     set({ loadingPortfolio: false })
   },
 
   loadOrders: async (accountId) => {
+    if (get().pacOrders.length === 0) {
+      const cached = await cacheGet<PacOrderListItem[]>(`orders.${accountId}`, TTL.orders)
+      if (cached && get().pacOrders.length === 0) set({ pacOrders: cached })
+    }
     set({ loadingOrders: true })
     try {
-      const pacOrders = await listOrders(accountId)
-      set({ pacOrders })
+      const fresh = await listOrders(accountId)
+      set({ pacOrders: fresh, apiStatus: null })
+      cacheSet(`orders.${accountId}`, fresh)
     } catch (e) {
-      console.error('[loadOrders] error:', e)
-      set({ pacOrders: [] })
-    } finally {
-      set({ loadingOrders: false })
-    }
+      const msg = (e as Error).message ?? String(e)
+      console.error('[loadOrders] failed:', msg)
+      set({ apiStatus: `Orders load failed: ${msg}` })
+    } finally { set({ loadingOrders: false }) }
   },
 
   loadFills: async (orderId) => {
@@ -133,36 +122,43 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     try {
       const fills = await listFills(orderId)
       set(state => ({ orderFills: { ...state.orderFills, [orderId]: fills } }))
-    } catch (e) {
-      console.error('[loadFills] error:', e)
+    } catch {
       set(state => ({ orderFills: { ...state.orderFills, [orderId]: [] } }))
-    } finally {
-      set({ loadingFillsId: null })
-    }
+    } finally { set({ loadingFillsId: null }) }
   },
 
   loadMarketData: async () => {
+    // Cache-first paint: previous quotes appear instantly on Market/Home,
+    // then the live fetch replaces them. Prevents the "no stocks yet" flash.
+    if (get().marketData.length === 0) {
+      const cached = await cacheGet<PacMarketData[]>('market', TTL.market)
+      if (cached && get().marketData.length === 0) set({ marketData: cached })
+    }
     set({ loadingMarket: true, apiStatus: null })
     try {
-      const marketData = await getMarketData()
-      set({ marketData })
+      const fresh = await getMarketData()
+      set({ marketData: fresh })
+      cacheSet('market', fresh)
     } catch (e) {
       const msg = (e as Error).message ?? String(e)
-      set({ marketData: [], apiStatus: `Market data error: ${msg}` })
-    } finally {
-      set({ loadingMarket: false })
-    }
+      // If we already painted a cached copy, keep it visible instead of wiping.
+      if (get().marketData.length === 0) set({ marketData: [] })
+      set({ apiStatus: `Market data error: ${msg}` })
+    } finally { set({ loadingMarket: false }) }
   },
 
-  placeOrder: async (order) => {
+  placeOrder: async (order, idempotencyKey) => {
     set({ orderLoading: true, orderResult: null })
     try {
-      const result = await placeOrder(order)
+      const result = await pacPlaceOrder(order, idempotencyKey)
       const routingOk = result.routingStatus === 'ACCEPTED' || result.routingStatus === 'DELIVERED'
       const statusOk = result.orderStatus === 'PENDING' || result.orderStatus === 'NEW' ||
         result.orderStatus === 'FILLED' || result.orderStatus === 'PARTIALLY_FILLED' ||
-        result.status === 'SUCCESS' || result.status === 'PENDING'
-      const success = routingOk || statusOk || !!(result.id ?? result.orderId)
+        result.status === 'SUCCESS' || result.status === 'PENDING' || result.orderStatus === 'APPROVED'
+      // Presence of an id alone is NOT proof of success — PAC returns an id
+      // for validation-only responses too. Require an explicit routing OR
+      // status signal before we claim success.
+      const success = routingOk || statusOk
       set({
         orderResult: {
           success,
@@ -170,13 +166,20 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
           orderId: result.id ?? result.orderId ?? null,
         },
       })
-      // Refresh account balance immediately after a successful order
       if (success) {
-        get().loadAccount(order.accountId).catch(() => {})
+        // Post-order refresh trio (account balance / positions / orders).
+        // Deferred by 400ms so the trade modal's dismiss animation and the
+        // receipt render land smoothly before three PAC HTTP fetches kick
+        // off — previously they fired concurrently with the transition and
+        // caused visible stutter on the underlying Home screen.
+        const acct = order.accountId
+        setTimeout(() => {
+          get().loadAccount(acct).catch(() => {})
+          get().loadPositions(acct).catch(() => {})
+          get().loadOrders(acct).catch(() => {})
+        }, 400)
       }
-      // Log to Supabase — wrapped separately so a logging failure never overwrites the order result
       try {
-        const { supabase } = await import('../lib/supabase')
         const userId = useAuthStore.getState().user?.id
         if (userId) {
           await supabase.from('orders').insert({
@@ -188,93 +191,46 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
             status: success ? 'placed' : 'failed',
           })
         }
-      } catch (logErr) {
-        console.error('[placeOrder] Supabase logging failed:', logErr)
-      }
+      } catch (logErr) { console.error('[placeOrder] Supabase logging failed:', logErr) }
     } catch (e: unknown) {
       set({ orderResult: { success: false, message: (e as Error).message } })
-    } finally {
-      set({ orderLoading: false })
-    }
+    } finally { set({ orderLoading: false }) }
   },
 
-  cancelOrder: async (pacOrderId: string, supabaseOrderId: string | null) => {
-    try {
-      await cancelOrder(pacOrderId)
-      // Optimistically update live orders list
-      set(state => ({
-        pacOrders: state.pacOrders.map(o =>
-          o.id === pacOrderId ? { ...o, orderStatus: 'PENDING_CANCEL' } : o
-        ),
-      }))
-      // Update Supabase record if we have the ID
-      if (supabaseOrderId) {
-        try {
-          const { supabase } = await import('../lib/supabase')
-          await supabase.from('orders').update({ status: 'cancelled' }).eq('id', supabaseOrderId)
-        } catch (logErr) {
-          console.error('[cancelOrder] Supabase update failed:', logErr)
-        }
-      }
-    } catch (e: unknown) {
-      throw new Error((e as Error).message)
+  cancelOrder: async (pacOrderId, supabaseOrderId) => {
+    await pacCancelOrder(pacOrderId)
+    set(state => ({
+      pacOrders: state.pacOrders.map(o =>
+        o.id === pacOrderId ? { ...o, orderStatus: 'PENDING_CANCEL' } : o
+      ),
+    }))
+    if (supabaseOrderId) {
+      try { await supabase.from('orders').update({ status: 'cancelled' }).eq('id', supabaseOrderId) }
+      catch (e) { console.error('[cancelOrder] Supabase update failed:', e) }
     }
   },
 
   clearOrderResult: () => set({ orderResult: null }),
 
-  startLivePrices: () => {
-    _wsStopped = false
-    if (_ws && _ws.readyState < 2) return
-    const key    = import.meta.env.VITE_MDS_API_KEY ?? 'deAaDavXQDFQNV7oUVZa'
-    const tenant = import.meta.env.VITE_MDS_TENANT_ID ?? 'pac-sec'
-
-    function connect() {
-      _ws = new WebSocket(
-        `wss://mywealth.mds.prod.mywealthcare.io/ws?x-api-key=${key}&x-tenant-id=${tenant}`
-      )
-      _ws.onopen = () => {
-        set({ wsConnected: true })
-        _ws?.send(JSON.stringify({ action: 'subscribe', marketCode: 'NGX' }))
-      }
-      _ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data as string) as Record<string, unknown>
-          const d = (msg.data ?? msg) as Record<string, unknown>
-          const secId = String(d.secId ?? '')
-          if (!secId) return
-          const price = Number(d.lastPx ?? d.close ?? 0)
-          if (!price) return
-          const open = Number(d.open ?? 0)
-          set(state => ({
-            marketData: state.marketData.map(s =>
-              s.symbol === secId ? {
-                ...s,
-                price,
-                changePercent: Number(d.percChange ?? s.changePercent),
-                change: open > 0 ? price - open : s.change,
-                high: Math.max(s.high, price),
-                volume: Number(d.volTraded ?? s.volume),
-              } : s
-            ),
-          }))
-        } catch {}
-      }
-      _ws.onerror = () => _ws?.close()
-      _ws.onclose = () => {
-        set({ wsConnected: false })
-        if (_wsReconnect) clearTimeout(_wsReconnect)
-        if (!_wsStopped) _wsReconnect = setTimeout(connect, 5000)
-      }
-    }
-    connect()
-  },
-
-  stopLivePrices: () => {
-    _wsStopped = true
-    if (_wsReconnect) clearTimeout(_wsReconnect)
-    _ws?.close()
-    _ws = null
-    set({ wsConnected: false })
+  // Full wipe — called from authStore.signOut so the next user never sees
+  // the previous user's positions / orders / cash while their own load is
+  // in flight. Also wipes the on-disk cache under `moneta.cache.*` to
+  // prevent SWR-painting user A's positions on user B's cold-start.
+  reset: () => {
+    cacheClear() // fire-and-forget; positions/account/orders are all keyed by accountId anyway
+    set({
+      account: null,
+      positions: [],
+      marketData: [],
+      pacOrders: [],
+      orderFills: {},
+      loadingPortfolio: false,
+      loadingMarket: false,
+      loadingOrders: false,
+      loadingFillsId: null,
+      orderLoading: false,
+      orderResult: null,
+      apiStatus: null,
+    })
   },
 }))

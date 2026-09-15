@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "ETICO",
+    "slug": "moneta-native",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "niqra",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/brand/etico-icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ng.moneta.capital"
+    },
+    "android": {
+      "package": "ng.moneta.capital",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/etico-adaptive-foreground.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "pacProxyUrl": "",
+      "mdsProxyUrl": "",
+      "nibssProxyUrl": "",
+      "monetaProxyUrl": ""
+    }
+  }
+}

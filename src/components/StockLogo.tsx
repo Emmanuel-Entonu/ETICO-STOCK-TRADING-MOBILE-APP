@@ -1,128 +1,118 @@
 import { useState } from 'react'
+import { View, Image, Platform, StyleSheet } from 'react-native'
+import { Text } from '@/ui'
+import { config } from '@/lib/config'
+import { LOCAL_LOGOS } from '@/lib/localLogos'
 
-// Map NGX ticker → company domain. Use the most globally recognised domain
-// so Google's favicon service has it well-indexed.
-const SYMBOL_DOMAIN: Record<string, string> = {
-  // Banks
-  GTCO:         'gtbank.com',
-  ZENITHBANK:   'zenithbank.com',
-  ACCESS:       'accessbank.com',
-  ACCESSCORP:   'accessbank.com',
-  FBNH:         'firstbanknigeria.com',
-  UBA:          'ubagroup.com',
-  FIDELITYBK:   'fidelitybank.ng',
-  STANBIC:      'stanbicibtc.com',
-  FCMB:         'fcmb.com',
-  WEMABANK:     'wemabank.com',
-  STERLINGBANK: 'sterling.ng',
-  JAIZBANK:     'jaizbank.com',
-  UNITYBNK:     'unitybankng.com',
-  ETI:          'ecobank.com',
-  // Cement / Construction
-  DANGCEM:      'dangote.com',
-  BUACEMENT:    'buacement.com',
-  WAPCO:        'lafarge.com',
-  LAFARGE:      'lafarge.com',
-  JBERGER:      'julius-berger.com',
-  // Telecom
-  MTNN:         'mtn.com',
-  AIRTELAFRI:   'airtel.com',
-  // Energy / Oil
-  SEPLAT:       'seplatpetroleum.com',
-  OANDO:        'oandoplc.com',
-  TOTAL:        'totalenergies.com',
-  TOTALENERGIES:'totalenergies.com',
-  ARDOVA:       'ardovaplc.com',
-  // Consumer / FMCG
-  NESTLE:       'nestle.com',
-  DANGSUGAR:    'dangote.com',
-  BUAFOODS:     'buagroup.com',
-  NB:           'nbplc.com',
-  GUINNESS:     'guinness.com',
-  CADBURY:      'cadbury.co.uk',
-  UNILEVER:     'unilever.com',
-  FLOURMILL:    'flourmillsng.com',
-  HONYFLOUR:    'honeyflourmill.com',
-  VITAFOAM:     'vitafoam.com.ng',
-  // Agriculture
-  PRESCO:       'presco.com.ng',
-  OKOMUOIL:     'okomuoil.com',
-  // Conglomerate / Others
-  TRANSCORP:    'transcorpgroup.com',
-  CORONATION:   'coronationmb.com',
-  CUTIX:        'cutix.com.ng',
+// ─────────────────────────────────────────────────────────────
+// StockLogo — points at the Vercel proxy's `/api/logo/{symbol}` endpoint.
+//
+// The proxy runs the multi-source cascade (logo.dev → clearbit →
+// apple-touch-icon → Google favicon → generated SVG chip), caches at the
+// CDN edge for 24 hours, and always returns an image response. That means
+// every install shares one canonical logo per ticker — no per-user
+// client-side URL cycling, no AsyncStorage cache, no icon.horse round
+// trips. RN's built-in `<Image>` cache handles per-device dedup.
+//
+// If the proxy call itself fails (offline, DNS), we fall through to the
+// initials badge below so the list still paints.
+// ─────────────────────────────────────────────────────────────
+
+const PALETTE = [
+  ['#0F172A', '#1E293B'],
+  ['#164E63', '#0E7490'],
+  ['#065F46', '#047857'],
+  ['#7C2D12', '#9A3412'],
+  ['#4A044E', '#701A75'],
+  ['#1E3A8A', '#2563EB'],
+  ['#134E4A', '#0F766E'],
+  ['#3F3F46', '#52525B'],
+  ['#312E81', '#4338CA'],
+  ['#7F1D1D', '#B91C1C'],
+] as const
+
+function hashCode(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h
+}
+function paletteFor(symbol: string): readonly [string, string] {
+  return PALETTE[hashCode(symbol) % PALETTE.length]
+}
+function initialsOf(symbol: string): string {
+  return symbol.slice(0, 3).toUpperCase()
 }
 
-const TICKER_COLORS: Record<string, string> = {
-  DANGCEM: '#f59e0b', GTCO: '#ef4444', ZENITHBANK: '#8b5cf6',
-  MTNN: '#eab308', AIRTELAFRI: '#ec4899', FBNH: '#3b82f6',
-  BUACEMENT: '#f97316', ACCESS: '#10b981', NESTLE: '#d97706', SEPLAT: '#6366f1',
-  UBA: '#0ea5e9', STANBIC: '#14b8a6', FCMB: '#a855f7', FIDELITYBK: '#f43f5e',
-  WEMABANK: '#84cc16', STERLINGBANK: '#06b6d4', JAIZBANK: '#10b981',
-  TRANSCORP: '#f59e0b', OANDO: '#6366f1', PRESCO: '#22c55e',
-  CADBURY: '#a16207', UNILEVER: '#0284c7', FLOURMILL: '#ca8a04',
-  DANGSUGAR: '#dc2626', CORONATION: '#7c3aed', NB: '#b45309', VITAFOAM: '#065f46',
-}
-const COLOR_POOL = [
-  '#f59e0b','#ef4444','#8b5cf6','#eab308','#ec4899','#3b82f6',
-  '#f97316','#10b981','#d97706','#6366f1','#0ea5e9','#14b8a6',
-  '#a855f7','#f43f5e','#84cc16','#06b6d4','#22c55e','#dc2626',
-]
-export function tickerColor(sym: string): string {
-  if (TICKER_COLORS[sym]) return TICKER_COLORS[sym]
-  let hash = 0
-  for (let i = 0; i < sym.length; i++) hash = sym.charCodeAt(i) + ((hash << 5) - hash)
-  return COLOR_POOL[Math.abs(hash) % COLOR_POOL.length]
-}
-
-interface StockLogoProps {
+interface Props {
   symbol: string
-  size?: number
-  radius?: number
+  size?:  number
 }
 
-export default function StockLogo({ symbol, size = 46, radius = 14 }: StockLogoProps) {
-  // 'primary' → Clearbit  'secondary' → Google SOCIAL favicon  'fallback' → initials
-  const [phase, setPhase] = useState<'primary' | 'secondary' | 'fallback'>('primary')
-  const domain = SYMBOL_DOMAIN[symbol]
-  const color = tickerColor(symbol)
-  const initials = symbol.replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase()
+export function StockLogo({ symbol, size = 40 }: Props) {
+  const [failed, setFailed] = useState(false)
+  // Hand-curated bundled logo first (instant, offline, best quality); otherwise
+  // the proxy's remote cascade.
+  const local = LOCAL_LOGOS[symbol.toUpperCase()]
+  const source = local ?? { uri: `${config.proxyBase}/api/logo?symbol=${encodeURIComponent(symbol.toUpperCase())}` }
 
-  if (domain && phase !== 'fallback') {
-    const src = phase === 'primary'
-      ? `https://logo.clearbit.com/${domain}`
-      : `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`
-
-    return (
-      <div style={{
-        width: size, height: size, borderRadius: radius, flexShrink: 0,
-        background: '#ffffff',
-        border: '1.5px solid rgba(255,255,255,0.1)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.28)',
-      }}>
-        <img
-          src={src}
-          alt={symbol}
-          style={{ width: '75%', height: '75%', objectFit: 'contain' }}
-          onError={() => setPhase(phase === 'primary' ? 'secondary' : 'fallback')}
-        />
-      </div>
-    )
-  }
+  if (failed) return <FallbackBadge symbol={symbol} size={size} />
 
   return (
-    <div style={{
-      width: size, height: size, borderRadius: radius, flexShrink: 0,
-      background: `linear-gradient(145deg, ${color}28, ${color}10)`,
-      border: `1.5px solid ${color}40`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: `0 2px 12px ${color}20, inset 0 1px 0 rgba(255,255,255,0.06)`,
-    }}>
-      <span style={{ fontSize: Math.round(size * 0.26), fontWeight: 900, color, letterSpacing: -0.5, lineHeight: 1 }}>
-        {initials}
-      </span>
-    </div>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 4,
+        backgroundColor: '#FFFFFF',
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Image
+        source={source}
+        style={{ width: size - 4, height: size - 4 }}
+        resizeMode="contain"
+        onError={() => setFailed(true)}
+      />
+    </View>
+  )
+}
+
+// Kept for cases where the proxy round-trip fails entirely (offline).
+function FallbackBadge({ symbol, size }: { symbol: string; size: number }) {
+  const [dark, light] = paletteFor(symbol)
+  const fontSize = Math.max(11, Math.round(size * 0.34))
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 4,
+        overflow: 'hidden',
+        backgroundColor: dark,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View
+        style={{
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: light,
+          opacity: 0.55,
+          transform: [{ translateY: -size * 0.5 }, { scaleY: 0.6 }],
+        }}
+      />
+      <Text
+        style={{
+          color: '#FFFFFF',
+          fontWeight: '900',
+          fontSize,
+          letterSpacing: Platform.OS === 'ios' ? 0.3 : 0.5,
+        }}
+      >
+        {initialsOf(symbol)}
+      </Text>
+    </View>
   )
 }

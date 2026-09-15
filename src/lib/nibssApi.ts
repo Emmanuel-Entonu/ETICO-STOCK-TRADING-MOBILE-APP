@@ -1,117 +1,106 @@
-export interface BvnProfile {
-  firstName: string
-  surname:   string
-  dob:       string
-  gender:    string
-  phone:     string
+import { config } from './config'
+import { supabase } from './supabase'
+
+async function authHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 export interface BvnInitResult {
   otpRequired: true
-  reference:   string
+  reference: string
   maskedPhone: string
 }
 
-function parseProfile(raw: Record<string, unknown>): BvnProfile {
-  const str = (v: unknown) => (v ? String(v).trim() : '')
-
-  const d1 = raw.data as Record<string, unknown> | undefined
-  const profile: Record<string, unknown> =
-    d1 && typeof d1 === 'object' && !Array.isArray(d1)
-      ? ((d1.profile ?? d1.bvnData ?? d1.bvn_data ?? d1.details ?? d1) as Record<string, unknown>)
-      : raw
-
-  const firstName = str(
-    profile.firstName ?? profile.first_name ?? profile.firstname ??
-    profile.FirstName ?? profile.given_name ?? profile.givenName
-  )
-  const surname = str(
-    profile.surname ?? profile.lastName ?? profile.last_name ??
-    profile.lastname ?? profile.LastName ?? profile.family_name
-  )
-  const fullNameField = str(profile.name ?? profile.fullName ?? profile.full_name ?? '')
-  const [splitFirst = '', ...rest] = fullNameField.split(' ')
-
-  return {
-    firstName: firstName || splitFirst,
-    surname:   surname   || rest.join(' '),
-    dob: str(
-      profile.dateOfBirth ?? profile.DateOfBirth ?? profile.dob ??
-      profile.date_of_birth ?? profile.birthDate
-    ),
-    gender: str(profile.gender ?? profile.Gender ?? profile.sex ?? ''),
-    phone: str(
-      profile.phoneNumber ?? profile.phone ?? profile.mobile ??
-      profile.msisdn ?? profile.telephone ?? profile.phone_number
-    ),
-  }
+export interface BvnProfile {
+  firstName:     string
+  middleName:    string
+  surname:       string
+  dob:           string
+  gender:        string
+  phone:         string
+  address:       string
+  nin:           string
+  maritalStatus: string
+  nationality:   string
+  stateOfOrigin: string
+  lgaOfOrigin:   string
+  title:         string
 }
 
-// Step 1 — sends OTP to the BVN owner's phone, returns a reference for step 2
+// Pull YYYY-MM-DD straight off the string. Using `new Date(...).toISOString()`
+// shifts the calendar day when the source has a +01:00 offset (WAT), which is
+// why DOBs came back one day early. Fall back to Date only for odd formats.
+function toDateOnly(raw: string): string {
+  if (!raw) return ''
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  const d = new Date(raw)
+  return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]
+}
+
 export async function initiateBvn(bvn: string): Promise<BvnInitResult> {
-  const res = await fetch('/api/nibss-bvn', {
+  const res = await fetch(`${config.proxyBase}/api/nibss-bvn`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bvn }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ action: 'query', bvn }),
   })
-  const text = await res.text()
-  console.log('[nibss initiate] status:', res.status)
-  console.log('[nibss initiate] raw text:', text)
-
-  let raw: Record<string, unknown>
-  try {
-    raw = JSON.parse(text) as Record<string, unknown>
-  } catch {
-    throw new Error(`BVN query returned non-JSON (${res.status}): ${text.slice(0, 300)}`)
-  }
-
-  const ok = raw.status === true || raw.status === 'success' || raw.status === 'SUCCESSFUL'
-  if (!ok) {
+  const raw = await res.json() as Record<string, unknown>
+  if (!res.ok || !(raw.status === true || raw.status === 'success' || raw.status === 'SUCCESSFUL')) {
     throw new Error(String(raw.message ?? raw.error ?? `BVN query failed (${res.status})`))
   }
-
-  // The proxy always injects customer_reference into a successful Step 1 response
-  const reference = String(raw.customer_reference ?? '')
-  console.log('[nibss initiate] customer_reference:', reference)
-
-  if (!reference) {
-    console.error('[nibss initiate] No customer_reference in response. Keys:', Object.keys(raw))
-    throw new Error(`BVN query succeeded but returned no reference. Keys: ${Object.keys(raw).join(', ')}`)
-  }
-
-  const d = raw.data as Record<string, unknown> | undefined
-  const maskedPhone = String(
-    d?.maskedPhone ?? d?.masked_phone ?? d?.phoneNumber ?? d?.phone ??
-    raw.maskedPhone ?? ''
+  const data = raw.data as Record<string, unknown> | undefined
+  const d = (Array.isArray(data) ? data[0] : data ?? raw) as Record<string, unknown>
+  const nested = d?.customer as Record<string, unknown> | undefined
+  const reference = String(
+    d?.customer_reference ?? d?.customerReference ?? d?.reference ?? d?.ref ??
+    nested?.customer_reference ?? nested?.customerReference ?? ''
   )
-
-  return { otpRequired: true, reference, maskedPhone }
+  if (!reference) throw new Error('BVN query returned no reference — try again')
+  return {
+    otpRequired: true,
+    reference,
+    maskedPhone: String(d?.maskedPhone ?? d?.masked_phone ?? d?.phoneNumber ?? ''),
+  }
 }
 
-// Step 2 — verify OTP returned from NIBSS, get the actual profile data
 export async function confirmBvnOtp(reference: string, otp: string): Promise<BvnProfile> {
-  const res = await fetch('/api/nibss-bvn', {
+  const res = await fetch(`${config.proxyBase}/api/nibss-bvn`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'get-bvn-details', reference, otp }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ action: 'verify-otp', reference, otp }),
   })
-
-  const text = await res.text()
-  console.log('[nibss confirm] status:', res.status)
-  console.log('[nibss confirm] raw text:', text)
-
-  let raw: Record<string, unknown>
-  try {
-    raw = JSON.parse(text) as Record<string, unknown>
-  } catch {
-    // Not JSON — surface the raw text so we know the real problem
-    throw new Error(`OTP verify returned non-JSON (${res.status}): ${text.slice(0, 300)}`)
-  }
-
-  const ok = raw.status === true || raw.status === 'success' || raw.status === 'SUCCESSFUL'
-  if (!res.ok || !ok) {
+  const raw = await res.json() as Record<string, unknown>
+  if (!res.ok || !(raw.status === true || raw.status === 'success' || raw.status === 'SUCCESSFUL')) {
     throw new Error(String(raw.message ?? raw.error ?? `OTP verification failed (${res.status})`))
   }
-
-  return parseProfile(raw)
+  const rawData = raw.data ?? raw
+  const d = (Array.isArray(rawData) ? rawData[0] : rawData) as Record<string, unknown>
+  const str = (v: unknown) => (v ? String(v).trim() : '')
+  const firstName  = str(d.first_name  ?? d.firstName)
+  const middleName = str(d.middle_name ?? d.middleName)
+  const surname    = str(d.surname     ?? d.last_name ?? d.lastName)
+  const rawDob     = str(d.DateOfBirth ?? d.date_of_birth ?? d.dob)
+  const street     = str(d.address ?? d.residential_address ?? d.residentialAddress ?? d.home_address)
+  const city       = str(d.city)
+  const state      = str(d.state_of_origin ?? d.stateOfOrigin)
+  const lga        = str(d.lga_of_origin ?? d.lgaOfOrigin ?? d.lga)
+  return {
+    firstName:     firstName,
+    middleName:    middleName,
+    surname:       surname,
+    dob:           toDateOnly(rawDob),
+    gender:        str(d.gender),
+    // NIBSS returns the phone as `Phone_number1` (with `Phone_number2` as a
+    // secondary); older mocks used phoneNumber/phone. Check them all.
+    phone:         str(d.Phone_number1 ?? d.phone_number1 ?? d.phoneNumber ?? d.phone ?? d.phone_number ?? d.Phone_number2),
+    address:       [street, city, state].filter(Boolean).join(', '),
+    nin:           str(d.nin),
+    maritalStatus: str(d.marital_status ?? d.maritalStatus),
+    nationality:   str(d.nationality),
+    stateOfOrigin: state,
+    lgaOfOrigin:   lga,
+    title:         str(d.title),
+  }
 }

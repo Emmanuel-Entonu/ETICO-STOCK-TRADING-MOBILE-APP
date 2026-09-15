@@ -1,112 +1,39 @@
-import { Capacitor } from '@capacitor/core'
+// Client-side Moneta payment helper.
+// IMPORTANT: this calls a server-side proxy that holds the merchant secrets.
+// The native app must NEVER contain CLIENT_SECRET / MAC_KEY / WALLET_SERVICE_KEY.
+// If the Vercel proxy has not been updated to expose these endpoints, they must be
+// added there first — see PRODUCT_HANDOFF.md § Part 3 (security).
 
-const PROXY_URL = (import.meta.env.VITE_MONETA_PROXY_URL as string | undefined) || 'https://moneta-proxy.fly.dev'
+import { config } from './config'
+import { supabase } from './supabase'
 
-function monetaUrl(endpoint: string) {
-  return `${PROXY_URL}/api/v2${endpoint}`
-}
-const CLIENT_ID  = import.meta.env.VITE_MONETA_CLIENT_ID     as string
-const CLIENT_SEC = import.meta.env.VITE_MONETA_CLIENT_SECRET as string
-const SVC_KEY    = import.meta.env.VITE_MONETA_WALLET_SERVICE_KEY as string
-const MAC_KEY    = import.meta.env.VITE_MONETA_MAC_KEY       as string
-
-const CALLBACK_URL = Capacitor.isNativePlatform()
-  ? `${window.location.origin}/payment/callback?source=native`
-  : `${window.location.origin}/payment/callback`
-
-let _token: string | null = null
-
-export async function getServiceToken(): Promise<string> {
-  if (_token) return _token
-
-  const creds = btoa(`${CLIENT_ID}:${CLIENT_SEC}:${SVC_KEY}`)
-  const res = await fetch(monetaUrl('/generate-access-token'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Auth-Token': creds,
-    },
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Moneta auth failed (${res.status}): ${text}`)
-  }
-
-  const data = await res.json() as { status: boolean; data?: string; message?: string }
-  if (!data.status || !data.data) throw new Error(data.message ?? 'Token exchange failed')
-  _token = data.data
-  return _token
-}
-
-async function generateHash(email: string, amount: number, paymentType: string): Promise<string> {
-  const message = email + amount + paymentType + CALLBACK_URL
-  const encoder = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(MAC_KEY),
-    { name: 'HMAC', hash: 'SHA-512' },
-    false,
-    ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+async function authHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 export type PaymentType = 'card' | 'bank-transfer' | 'ussd'
+
+interface InitResponse {
+  reference: string
+  authorizationUrl: string
+}
 
 export async function initializePayment(
   email: string,
   amountNaira: number,
   paymentType: PaymentType,
-): Promise<{ reference: string; authorizationUrl: string }> {
-  const token  = await getServiceToken()
-  const amount = Math.round(amountNaira * 100)
-  const hash   = await generateHash(email, amount, paymentType)
-
-  const res = await fetch(monetaUrl('/transaction/initialize'), {
+  callbackUrl: string,
+): Promise<InitResponse> {
+  const res = await fetch(`${config.proxyBase}/api/moneta-charge`, {
     method: 'POST',
-    headers: {
-      'Content-Type':    'application/json',
-      'X-Service-Token': token,
-    },
-    body: JSON.stringify({
-      amount,
-      email,
-      payment_type: paymentType,
-      hash,
-      callback_url: CALLBACK_URL,
-    }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ action: 'initialize', email, amountNaira, paymentType, callbackUrl }),
   })
-
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 422) _token = null
-    const text = await res.text()
-    throw new Error(`Payment init failed (${res.status}): ${text}`)
-  }
-
-  const data = await res.json() as {
-    status: string | boolean
-    responseCode?: string
-    ref_no?: string
-    reference?: string
-    authorization_url?: string
-    message?: string
-  }
-
-  const ok = data.status === 'success' || data.status === true || data.responseCode === '00'
-  if (!ok) throw new Error(data.message ?? 'Payment initialisation failed')
-
-  const reference = data.ref_no ?? data.reference ?? ''
-  let authorizationUrl = data.authorization_url ?? ''
-
-  if (authorizationUrl && !authorizationUrl.startsWith('http')) {
-    authorizationUrl = `https://api.moneta.ng${authorizationUrl}`
-  }
-
-  return { reference, authorizationUrl }
+  if (!res.ok) throw new Error(`Payment init failed (${res.status}): ${await res.text()}`)
+  const data = await res.json() as { reference: string; authorizationUrl: string }
+  return data
 }
 
 export async function verifyPayment(reference: string): Promise<{
@@ -114,36 +41,99 @@ export async function verifyPayment(reference: string): Promise<{
   amountNaira: number
   message: string
 }> {
-  const token = await getServiceToken()
-  const res = await fetch(monetaUrl('/transaction/charge/verify/reference'), {
+  const res = await fetch(`${config.proxyBase}/api/moneta-charge`, {
     method: 'POST',
-    headers: {
-      'Content-Type':    'application/json',
-      'X-Service-Token': token,
-    },
-    body: JSON.stringify({ reference }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ action: 'verify', reference }),
   })
+  if (!res.ok) throw new Error(`Verify failed (${res.status})`)
+  return res.json()
+}
 
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 422) _token = null
-    throw new Error(`Verify failed (${res.status})`)
+// ── Virtual account (wallet) ────────────────────────────────────────────────
+// All wallet calls route through /api/moneta-va, which holds the partner
+// service token and forwards to Moneta via the static (whitelisted) IP.
+
+// The wallet proxy always answers with JSON. If we get an empty body or HTML
+// (e.g. the /api/moneta-va route hasn't been deployed yet, so Vercel returns a
+// 404 / the SPA shell), surface a clear message instead of a raw JSON.parse
+// "Unexpected end of input".
+async function parseJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text()
+  if (!text) {
+    throw new Error(`Wallet service returned no response (${res.status}). Is the /api/moneta-va proxy deployed?`)
   }
-
-  const data = await res.json() as {
-    status: string | boolean          // top-level = API call status, not payment status
-    data?: { amount?: number; reference?: string; status?: string }
-    message?: string
-  }
-
-  // data.status is always true/200 if the HTTP call worked — check the inner payment status
-  const paymentStatus = String(data.data?.status ?? '').toLowerCase()
-  const success = paymentStatus === 'success'
-  // Moneta amounts are in kobo (same convention as Paystack) — divide by 100 to get naira
-  return {
-    success,
-    amountNaira: (data.data?.amount ?? 0) / 100,
-    message: data.message ?? (success ? 'Payment successful' : 'Payment not completed'),
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    throw new Error(`Wallet service error (${res.status}): ${text.slice(0, 140)}`)
   }
 }
 
-export const MONETA_CONFIGURED = !!(CLIENT_ID && CLIENT_SEC && SVC_KEY && MAC_KEY)
+export interface VirtualAccount {
+  reference:   string   // virtual_account_reference
+  number:      string   // account_number
+  accountName: string   // account_name as returned by Moneta
+  bank:        string   // bank_name (e.g. "Providus Bank")
+}
+
+export async function createVirtualAccount(params: {
+  accountName: string
+  surname:     string
+  firstName:   string
+  bvn:         string
+  nin:         string
+}): Promise<VirtualAccount> {
+  const res = await fetch(`${config.proxyBase}/api/moneta-va`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({
+      action:       'create',
+      account_name: params.accountName,
+      account_type: 'static',
+      surname:      params.surname,
+      first_name:   params.firstName,
+      bvn:          params.bvn,
+      nin:          params.nin,
+    }),
+  })
+  const raw = await parseJson(res) as { status?: boolean; message?: string; error?: string; data?: Record<string, string> }
+  if (!res.ok || raw.status !== true || !raw.data) {
+    throw new Error(String(raw.message ?? raw.error ?? `Could not create wallet (${res.status})`))
+  }
+  const d = raw.data
+  return {
+    reference:   String(d.virtual_account_reference ?? ''),
+    number:      String(d.account_number ?? ''),
+    accountName: String(d.account_name ?? params.accountName),
+    bank:        String(d.bank_name ?? ''),
+  }
+}
+
+// On-demand funding sync: asks the server to reconcile THIS user's own VA
+// deposit into their PAC account + wallet ledger right now (instead of waiting
+// for the periodic cron). Best-effort — the cron is the backstop. Idempotent
+// server-side, so calling it repeatedly is safe.
+export async function syncWalletFunding(): Promise<void> {
+  try {
+    await fetch(`${config.proxyBase}/api/reconcile-funding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    })
+  } catch {
+    // ignore — the scheduled reconciler will still pick it up
+  }
+}
+
+// Returns the wallet balance in naira, or null if it could not be read.
+export async function getVirtualAccountBalance(reference: string): Promise<number | null> {
+  const res = await fetch(`${config.proxyBase}/api/moneta-va`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ action: 'balance', virtual_account_reference: reference }),
+  })
+  const raw = await parseJson(res) as { status?: boolean; data?: { balance?: string | number } }
+  if (!res.ok || raw.status !== true || raw.data?.balance == null) return null
+  const n = Number(raw.data.balance)
+  return Number.isFinite(n) ? n : null
+}
