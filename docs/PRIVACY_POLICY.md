@@ -1,7 +1,7 @@
 # ETICO — Privacy Policy
 
 **Data controller:** Moneta Capital Investment Limited (“Moneta Capital”, “ETICO”, “we”, “us”, “our”)
-**Product:** ETICO — a mobile application for investing in Shariah-screened (ethical) equities listed on the Nigerian Exchange (NGX).
+**Product:** ETICO — a mobile application for investing in ethically screened equities listed on the Nigerian Exchange (NGX).
 **Effective date:** 9 September 2026
 **Last updated:** 9 September 2026
 

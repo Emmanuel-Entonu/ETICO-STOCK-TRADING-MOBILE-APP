@@ -34,7 +34,7 @@ export function sectorOf(symbol: string): string | null {
  *  - No trade history → no recommendations (returns []). New users get nothing
  *    until they've actually bought/sold; we don't guess.
  *  - Traded only uncategorised tickers → still [] (no sector signal).
- *  - Otherwise → other Shariah-screened names in those same sectors, excluding
+ *  - Otherwise → other ethically screened names in those same sectors, excluding
  *    anything they already hold/traded.
  */
 export function recommendEthicalSymbols(traded: string[], limit = 8): string[] {

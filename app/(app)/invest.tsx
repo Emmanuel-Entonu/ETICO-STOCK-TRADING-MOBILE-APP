@@ -15,7 +15,7 @@ import { Icon } from '@/ui'
 const CATEGORY_IMAGES = {
   ethical:  require('../../assets/asset-icons/ethical-stocks.png') as ImageSourcePropType,
   nigerian: require('../../assets/asset-icons/ngx-stocks.png')     as ImageSourcePropType,
-  bonds:    require('../../assets/asset-icons/sukuk-bonds.png')    as ImageSourcePropType,
+  bonds:    require('../../assets/asset-icons/ethical-bonds.png')  as ImageSourcePropType,
   savings:  require('../../assets/asset-icons/naira-savings.png')  as ImageSourcePropType,
 } as const
 
@@ -102,18 +102,18 @@ export default function AssetsScreen() {
 
   // Strictly ethical now (MD directive) — the old NGX-all card is merged into
   // the combined ethical hero below. Only the "Soon" products remain in the grid.
-  const ethicalSubtitle = `${ethicalCount || ETHICAL_TICKERS.size} Shariah-screened on the NGX`
+  const ethicalSubtitle = `${ethicalCount || ETHICAL_TICKERS.size} ethically screened on the NGX`
   const categories: AssetCategory[] = [
     {
       key: 'bonds',
-      title: 'Sukuk & Bonds',
+      title: 'Ethical Bonds',
       subtitle: 'Fixed-income instruments',
       badge: 'Soon',
     },
     {
       key: 'savings',
-      title: 'Halal Savings',
-      subtitle: 'Grow cash the halal way',
+      title: 'Ethical Savings',
+      subtitle: 'Grow cash the ethical way',
       badge: 'Soon',
     },
   ]
@@ -270,7 +270,7 @@ function CombinedEthicalCard({ ethicalImg, ngxImg, subtitle, onPress }: {
       <View style={styles.comboCenter}>
         <View style={styles.comboBadge}>
           <Icon name="solar:leaf-bold" size={12} color={colors.accentInk} />
-          <Text style={styles.comboBadgeText}>SHARIAH-SCREENED</Text>
+          <Text style={styles.comboBadgeText}>ETHICALLY SCREENED</Text>
         </View>
         <Text style={styles.comboTitle}>Ethical Stocks</Text>
         <Text style={styles.comboSubtitle} numberOfLines={1}>{subtitle}</Text>

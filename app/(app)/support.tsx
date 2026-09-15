@@ -42,8 +42,8 @@ const FAQ: FaqSection[] = [
   {
     key: 'ethical', title: 'Ethical investing', icon: 'solar:leaf-bold',
     items: [
-      { q: 'What makes a stock “ethical” on ETICO?', a: 'Every stock on ETICO is Shariah screened. Companies in prohibited activities such as interest based finance, alcohol and gambling are excluded. Screening is reviewed on an ongoing basis.' },
-      { q: 'Can I trade non-ethical stocks?', a: 'No. ETICO is strictly ethical by design. Only screened, halal compatible NGX equities are available.' },
+      { q: 'What makes a stock “ethical” on ETICO?', a: 'Every stock on ETICO is ethically screened. Companies in prohibited activities such as interest based finance, alcohol and gambling are excluded. Screening is reviewed on an ongoing basis.' },
+      { q: 'Can I trade non-ethical stocks?', a: 'No. ETICO is strictly ethical by design. Only screened, ethically compatible NGX equities are available.' },
     ],
   },
 ]

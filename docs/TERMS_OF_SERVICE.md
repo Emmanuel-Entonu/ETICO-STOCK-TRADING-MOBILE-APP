@@ -1,14 +1,14 @@
 # ETICO — Terms of Service
 
 **Operated by:** Moneta Capital Investment Limited (“Moneta Capital”, “ETICO”, “we”, “us”, “our”)
-**Product:** ETICO — a mobile application for investing in Shariah-screened (ethical) equities listed on the Nigerian Exchange (NGX).
+**Product:** ETICO — a mobile application for investing in ethically screened equities listed on the Nigerian Exchange (NGX).
 **Effective date:** 9 September 2026
 **Last updated:** 9 September 2026
 
 > **⚠️ DRAFT — REQUIRES LEGAL REVIEW.** This document was drafted from the app’s
 > actual functionality as an internal working template. It is **not legal advice**
 > and must be reviewed and finalised by a qualified Nigerian legal practitioner
-> (and, where relevant, a Shariah advisory board and Moneta Capital’s compliance
+> (and, where relevant, an ethical-investing advisory and Moneta Capital’s compliance
 > team) before it is published to users or relied upon. Items in `{{curly braces}}`
 > are placeholders for the company to complete.
 
@@ -68,10 +68,10 @@ We may refuse, suspend or close accounts that do not meet these requirements.
   category or risk labels are **for information only** and are not advice or an
   offer, solicitation or inducement to buy or sell any security. You make your own
   investment decisions based on your own assessment of suitability.
-- ETICO offers access to a curated set of **Shariah-screened (“ethical”)** equities.
+- ETICO offers access to a curated set of **ethically screened** equities.
   Screening is applied on a best-efforts basis and is subject to ongoing review by
-  our compliance function and Shariah advisory. Inclusion of a security **does not
-  constitute a guarantee** of its Shariah compliance at all times, and the screened
+  our compliance function. Inclusion of a security **does not
+  constitute a guarantee** of its ethical status at all times, and the screened
   universe may change. You are responsible for satisfying yourself as to the
   suitability of any security for your beliefs and objectives.
 

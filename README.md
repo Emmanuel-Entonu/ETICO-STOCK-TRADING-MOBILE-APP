@@ -1,6 +1,6 @@
 # ETICO — Mobile App
 
-ETICO is a mobile brokerage app for **Shariah-screened ("ethical") stocks on the Nigerian Exchange (NGX)**, operated by Moneta Capital Investment Limited. Users verify their identity (BVN + KYC), get a brokerage account, fund a wallet, and buy/sell from a screened universe of ethical NGX tickers.
+ETICO is a mobile brokerage app for **ethically screened stocks on the Nigerian Exchange (NGX)**, operated by Moneta Capital Investment Limited. Users verify their identity (BVN + KYC), get a brokerage account, fund a wallet, and buy/sell from a screened universe of ethical NGX tickers.
 
 - **Bundle identifier:** `ng.moneta.capital` (iOS & Android)
 - **App name / slug:** ETICO / `moneta-native`

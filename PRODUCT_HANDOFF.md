@@ -166,7 +166,7 @@
 - Automated CSCS issuance (blocked on PAC)
 - Face verification (blocked on Moneta endpoint spec)
 - BaaS API layer
-- Halal screening integration
+- Ethical screening integration
 - iOS build (unless time permits)
 
 **Framing for the meeting:** "Friday = signed native build of the working demo, released to a controlled pilot group, with the known security hole patched. Full public launch follows in 2–3 weeks after PAC answers on funding + CSCS APIs and a security pass."
@@ -196,10 +196,10 @@
 - Own ledger schema per partner
 - Partner API docs (auto-generated from OpenAPI)
 
-### Wave 3 — Halal + growth (2–3 months)
-- Integrate the drafted halal screening TS module
-- `/screening` endpoint + `halal` flag on instruments
-- Compliant-universe view in the consumer app ("Halal Only" filter)
+### Wave 3 — Ethical screening + growth (2–3 months)
+- Integrate the drafted ethical screening TS module
+- `/screening` endpoint + `ethical` flag on instruments
+- Compliant-universe view in the consumer app ("Ethical Only" filter)
 - Partner webhooks (fills, settlement)
 - Ledger reconciliation with PAC (nightly)
 - Withdrawal / settlement rails
@@ -290,7 +290,7 @@ graph TB
     PartnerN[Partner App N ...]
     BaaS[Moneta BaaS API<br/>api.moneta.dev/v1]
     Ledger[(Moneta Ledger<br/>own source of truth)]
-    Halal[Halal Screening<br/>engine]
+    Ethical[Ethical Screening<br/>engine]
     PAC[PAC Wealthcare]
     MonetaSvc[Moneta internal:<br/>BVN + Face + Payments]
 
@@ -300,7 +300,7 @@ graph TB
     PartnerN -->|partner key| BaaS
 
     BaaS --> Ledger
-    BaaS --> Halal
+    BaaS --> Ethical
     BaaS -->|PAC adapter<br/>master creds server-side| PAC
     BaaS -->|KYC + payments<br/>server-side creds| MonetaSvc
 
@@ -314,7 +314,7 @@ graph TB
 - No client ever sees PAC or Moneta credentials
 - All partners (including Moneta's own apps) authenticate identically
 - BaaS ledger is source of truth, reconciled with PAC
-- Halal screening baked in
+- Ethical screening baked in
 - Native + web + partner apps share one API surface
 
 ---

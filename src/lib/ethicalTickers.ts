@@ -1,16 +1,16 @@
-// Ethical / Shariah-compliant NGX ticker set (starter list).
+// Ethical NGX ticker set (starter list).
 //
-// TODO: replace this hardcoded set with the drafted halal-screening engine
-// once it's integrated. Real screening applies AAOIFI-style thresholds
+// TODO: replace this hardcoded set with the drafted ethical-screening engine
+// once it's integrated. Real screening applies quantitative thresholds
 // (interest income %, debt/equity, prohibited activity) rather than a
 // static allowlist. Until then this list powers the Ethical filter for
 // demo purposes and should be reviewed by Moneta's compliance team before
 // any user sees it in production.
 
 export const ETHICAL_TICKERS: ReadonlySet<string> = new Set([
-  // Officially halal-compliant ETF (NGX-listed)
+  // Ethically screened ETF (NGX-listed)
   'LOTUSHAL15',
-  // Islamic finance
+  // Non-interest / ethical finance
   'JAIZBANK',
   // Cement + materials  (HBMN = Lafarge Africa; WAPCO is the same security so it
   // is not listed separately)
@@ -27,7 +27,7 @@ export const ETHICAL_TICKERS: ReadonlySet<string> = new Set([
   'SEPLAT', 'CONOIL', 'TOTAL', 'MRS', 'ETERNA', 'ARADEL', 'OANDO',
   // Utilities
   'GEREGU', 'TRANSPOWER',
-  // Services / logistics / support (halal-compatible sectors)
+  // Services / logistics / support (ethically compatible sectors)
   'CAVERTON', 'NAHCO', 'SAHCO', 'REDSTAREX',
   'TIP', 'CILEASING', 'JOHNHOLT',
   // Technology / digital / IT
