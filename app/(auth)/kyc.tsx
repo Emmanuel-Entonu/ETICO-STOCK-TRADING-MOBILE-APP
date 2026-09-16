@@ -27,7 +27,7 @@ const ID_TYPES = [
 
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
-  2: { title: 'Your ID document',       subtitle: 'Pick an ID type and enter its number.' },
+  2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
   3: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we create your account.' },
 }
 
@@ -58,9 +58,15 @@ export default function KycScreen() {
   // the exact surname / first name / NIN NIBSS returned).
   const [bvnProfile, setBvnProfile] = useState<BvnProfile | null>(null)
 
-  // Step 2
+  // Step 2 — ID
   const [idType, setIdType] = useState<typeof ID_TYPES[number]['value']>('International Passport')
   const [idNumber, setIdNumber] = useState('')
+  // Step 2 — settlement (bank) account. This is the PAC account-opening form's
+  // "BANK ACCOUNT DETAILS": where sale proceeds / withdrawals are paid out. It
+  // is NOT the Moneta funding wallet. Reviewed by PAC on the partner dashboard.
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountName, setAccountName] = useState('')
 
   // Step 3
   const [saving, setSaving] = useState(false)
@@ -126,7 +132,11 @@ export default function KycScreen() {
     && validateDob(dob).ok
     && validateAddress(address).ok
     && validateNigerianPhone(phone).ok
-  const canStep2 = !!idType && validateIdNumber(idNumber).ok
+  const settlementOk =
+    bankName.trim().length >= 2
+    && /^\d{10}$/.test(accountNumber)
+    && accountName.trim().length >= 2
+  const canStep2 = !!idType && validateIdNumber(idNumber).ok && settlementOk
 
   async function submit() {
     if (!user) return
@@ -141,6 +151,14 @@ export default function KycScreen() {
     if (firstFail && !firstFail.ok) { setSubmitError(firstFail.error); return }
     if (!name.ok || !dobV.ok || !addrV.ok || !phoneV.ok || !idNumV.ok || !bvnV.ok) return
 
+    // Settlement (bank) account — PAC form's "BANK ACCOUNT DETAILS".
+    const acctName = accountName.trim()
+    const acctNo   = accountNumber.replace(/\D/g, '')
+    const bank     = bankName.trim()
+    if (acctName.length < 2 || acctName.length > 120) { setSubmitError('Enter the account name on your settlement account'); return }
+    if (!/^\d{10}$/.test(acctNo))                     { setSubmitError('Settlement account number must be 10 digits'); return }
+    if (bank.length < 2 || bank.length > 80)          { setSubmitError('Enter your settlement bank'); return }
+
     setSaving(true); setSubmitError(null)
     try {
       const { error: dbError } = await supabase.from('profiles').upsert({
@@ -153,6 +171,10 @@ export default function KycScreen() {
         id_type: idType,
         id_number: idNumV.value,
         kyc_status: 'submitted',
+        // Settlement (bank) account — reviewed on the PAC partner dashboard.
+        settlement_account_name:   acctName,
+        settlement_account_number: acctNo,
+        settlement_bank_name:      bank,
         // Full BVN record (when OTP-verified) — used by the wallet VA + records.
         first_name:     bvnProfile?.firstName || null,
         middle_name:    bvnProfile?.middleName || null,
@@ -178,8 +200,13 @@ export default function KycScreen() {
         idNumber: idNumV.value,
       })
 
+      // Identity is verified and the broker account exists, but the CSCS
+      // account still needs a PAC reviewer to approve it on the partner
+      // dashboard. Mark it 'pending' so the app shows "CSCS under review" until
+      // the reviewer flips it to 'approved' (which unlocks trading) or
+      // 'rejected'. A redo re-runs this whole flow → back to 'pending'.
       const { error: updateErr } = await supabase.from('profiles')
-        .update({ pac_account_id: pacAccountId, kyc_status: 'verified' })
+        .update({ pac_account_id: pacAccountId, kyc_status: 'verified', cacs_status: 'pending' })
         .eq('id', user.id)
       if (updateErr) throw new Error(updateErr.message)
 
@@ -360,6 +387,37 @@ export default function KycScreen() {
 
                 <View style={{ height: spacing['2xl'] }} />
                 <UField label="ID number" value={idNumber} onChangeText={setIdNumber} placeholder="Enter your ID number" autoCapitalize="characters" big />
+
+                <Divider label="Settlement bank account" />
+                <View style={styles.uploadNote()}>
+                  <Icon name="solar:info-circle-linear" size={18} color={colors.textMuted} />
+                  <Text variant="small" tone="muted" style={{ flex: 1 }}>
+                    Where your sale proceeds and withdrawals are paid out. Use an account in your own name.
+                  </Text>
+                </View>
+                <View style={{ height: spacing.xl }} />
+                <UField
+                  label="Bank name"
+                  value={bankName}
+                  onChangeText={setBankName}
+                  placeholder="e.g. Guaranty Trust Bank"
+                  autoCapitalize="words"
+                />
+                <UField
+                  label="Account number"
+                  value={accountNumber}
+                  onChangeText={(v: string) => setAccountNumber(v.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10 digits"
+                  keyboardType="number-pad"
+                  maxLength={10}
+                />
+                <UField
+                  label="Account name"
+                  value={accountName}
+                  onChangeText={setAccountName}
+                  placeholder="Name on the account"
+                  autoCapitalize="words"
+                />
               </View>
             )}
 
@@ -391,7 +449,10 @@ export default function KycScreen() {
                   {bvnProfile?.lgaOfOrigin ?   <ReviewRow label="LGA of origin" value={bvnProfile.lgaOfOrigin} /> : null}
                   <ReviewRow label="BVN" value={bvn ? `••••••${bvn.slice(-3)}` : 'Not provided'} />
                   <ReviewRow label="ID type" value={idType} />
-                  <ReviewRow label="ID number" value={idNumber} last />
+                  <ReviewRow label="ID number" value={idNumber} />
+                  <ReviewRow label="Settlement bank" value={bankName} />
+                  <ReviewRow label="Account number" value={accountNumber} />
+                  <ReviewRow label="Account name" value={accountName} last />
                 </View>
 
                 <View style={styles.uploadNote()}>

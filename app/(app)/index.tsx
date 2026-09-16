@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { OrderRow } from '@/components/OrderRow'
 import { RecommendedRail } from '@/components/RecommendedRail'
+import { CscsNotice } from '@/components/CscsNotice'
 import { useNotificationStore } from '@/store/notificationStore'
 
 type Tab = 'holdings' | 'orders'
@@ -83,7 +84,7 @@ export default function HomeScreen() {
         <Row justify="space-between" align="center" style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg }}>
           <Row gap="md" align="center">
             <View style={styles.avatar}>
-              <Text style={{ color: colors.textOnBrand, fontWeight: '800', fontSize: 16 }}>{initial}</Text>
+              <Text style={{ color: colors.textOnBrand, fontWeight: '800', fontSize: 16, lineHeight: 20, textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
             </View>
             <View>
               <Text variant="small" tone="muted">Welcome back</Text>
@@ -238,11 +239,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* KYC / CACS setup prompt */}
-        {(kycStatus !== 'verified' || cacsStatus !== 'approved') && (
+        {/* Identity KYC prompt — only until identity is verified. */}
+        {kycStatus !== 'verified' && (
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
             <Pressable
-              onPress={() => router.push(kycStatus !== 'verified' ? '/(auth)/kyc' : '/(app)/account')}
+              onPress={() => router.push('/(auth)/kyc')}
               style={({ pressed }) => [
                 styles.setupCard,
                 pressed && { backgroundColor: colors.bgSubtle },
@@ -256,7 +257,7 @@ export default function HomeScreen() {
                   <View style={{ flex: 1 }}>
                     <Text variant="bodyStrong">Finish setting up</Text>
                     <Text variant="small" tone="muted" style={{ marginTop: 2 }}>
-                      {kycStatus !== 'verified' ? 'Verify your identity to unlock trading' : 'Submit CACS form to enable NGX trades'}
+                      Verify your identity to unlock trading
                     </Text>
                   </View>
                 </Row>
@@ -265,6 +266,14 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         )}
+
+        {/* CSCS review status (under review / rejected + redo). Self-gates:
+            renders only when identity KYC is done and CSCS isn't approved.
+            No marginTop here — an empty wrapper must add no gap; the notice
+            card carries its own top spacing when it renders. */}
+        <View style={{ paddingHorizontal: spacing.xl }}>
+          <CscsNotice topSpacing />
+        </View>
 
         {/* Holdings / Orders filter */}
         <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing['2xl'] }}>

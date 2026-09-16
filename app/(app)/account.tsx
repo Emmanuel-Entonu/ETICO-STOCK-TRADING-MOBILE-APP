@@ -39,7 +39,7 @@ export default function AccountScreen() {
         >
           <View style={{ padding: 3, borderRadius: 999, borderWidth: 2, borderColor: colors.accent }}>
             <View style={avatarStyle}>
-              <Text style={{ color: colors.textOnBrand, fontSize: 28, fontWeight: '800' }}>{initial}</Text>
+              <Text style={{ color: colors.textOnBrand, fontSize: 28, lineHeight: 34, fontWeight: '800', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
             </View>
           </View>
           <Text variant="h2" style={{ marginTop: spacing.md }} numberOfLines={1}>{displayName}</Text>
@@ -95,7 +95,19 @@ export default function AccountScreen() {
             <MenuRow
               icon="solar:document-linear"
               label="Legal & policies"
-              onPress={() => toast.info('Legal', 'Terms of service, privacy policy and disclosures — coming shortly.')}
+              onPress={() => router.push('/legal' as never)}
+            />
+          </Card>
+        </View>
+
+        {/* Account management */}
+        <SectionHeader label="ACCOUNT" />
+        <View style={{ paddingHorizontal: spacing.xl }}>
+          <Card padded={false}>
+            <MenuRow
+              icon="solar:danger-triangle-bold"
+              label="Delete account"
+              onPress={() => router.push('/delete-account' as never)}
             />
           </Card>
         </View>
@@ -120,7 +132,7 @@ export default function AccountScreen() {
           ETICO — by Moneta Capital Investment Limited
         </Text>
         <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs }}>
-          v0.1.0
+          v1.0.0
         </Text>
       </ScrollView>
 

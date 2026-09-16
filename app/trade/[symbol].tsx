@@ -390,11 +390,13 @@ export default function TradeScreen() {
                 )}
                 {kycStatus === 'verified' && cacsStatus !== 'approved' && (
                   <GateNotice
-                    icon="solar:document-add-bold"
-                    title="CSCS account required"
-                    subtitle={cacsStatus === 'pending' ? 'Your CACS submission is under review (1–3 business days).' : 'Submit CACS form to enable trading.'}
-                    ctaLabel={cacsStatus === 'pending' ? 'Track Status' : 'Submit CACS'}
-                    onPress={() => toast.info('CACS', 'CACS submission screen is being built next.')}
+                    icon={cacsStatus === 'rejected' ? 'solar:shield-warning-bold' : 'solar:clock-circle-bold'}
+                    title={cacsStatus === 'rejected' ? 'CSCS verification rejected' : 'CSCS account under review'}
+                    subtitle={cacsStatus === 'rejected'
+                      ? 'PAC Securities couldn’t approve your account. Redo KYC to try again.'
+                      : 'Your details are with PAC Securities. Trading unlocks once approved — usually 1–2 business days.'}
+                    ctaLabel={cacsStatus === 'rejected' ? 'Redo KYC' : 'View status'}
+                    onPress={() => router.push((cacsStatus === 'rejected' ? '/(auth)/kyc' : '/(app)') as never)}
                   />
                 )}
 

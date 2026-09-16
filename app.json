@@ -2,7 +2,7 @@
   "expo": {
     "name": "ETICO",
     "slug": "moneta-native",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "niqra",
     "userInterfaceStyle": "automatic",
@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "ng.moneta.capital",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/etico-adaptive-foreground.png",
         "backgroundColor": "#FFFFFF"
@@ -22,7 +23,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#DAA92F"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

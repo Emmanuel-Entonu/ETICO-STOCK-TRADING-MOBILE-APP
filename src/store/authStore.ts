@@ -250,12 +250,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           nin,
         })
 
-        await supabase.from('profiles').update({
-          va_reference:    va.reference,
-          va_number:       va.number,
-          va_bank:         va.bank,
-          va_account_name: va.accountName,
-        }).eq('id', user.id)
+        // Persist via the SECURITY DEFINER RPC — the va_* columns are
+        // UPDATE-revoked from clients (funding-security-patch.sql), so a direct
+        // .update() fails once that revoke is applied and the VA would silently
+        // never persist (re-provisioning a duplicate every launch). The RPC is a
+        // one-time write that only fills the caller's own empty va_reference.
+        const { error: rpcErr } = await supabase.rpc('set_virtual_account', {
+          p_ref:  va.reference,
+          p_num:  va.number,
+          p_bank: va.bank,
+          p_name: va.accountName,
+        })
+        if (rpcErr) throw new Error(rpcErr.message)
 
         set({
           vaReference:   va.reference,

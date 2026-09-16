@@ -18,6 +18,12 @@ buildscript {
         classpath('com.android.tools.build:gradle')
         classpath('com.facebook.react:react-native-gradle-plugin')
         classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+        // Firebase / FCM (push). Only pulled in once google-services.json exists
+        // (matching the conditional apply in app/build.gradle), so builds don't
+        // try to download it — or fail offline — before Firebase is set up.
+        if (file("${rootDir}/app/google-services.json").exists()) {
+            classpath('com.google.gms:google-services:4.4.2')
+        }
     }
 }
 

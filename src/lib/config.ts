@@ -29,4 +29,11 @@ export const config = {
   supabaseUrl:     resolve('EXPO_PUBLIC_SUPABASE_URL',      FALLBACK_SUPABASE_URL),
   supabaseAnonKey: resolve('EXPO_PUBLIC_SUPABASE_ANON_KEY', FALLBACK_SUPABASE_ANON_KEY),
   proxyBase:       resolve('EXPO_PUBLIC_PROXY_BASE',        FALLBACK_PROXY_BASE),
+  // Public marketing/legal site (served by the Next.js web app). Used for the
+  // in-app Privacy Policy / Terms links Google Play requires.
+  siteBase:        resolve('EXPO_PUBLIC_SITE_BASE',         'https://www.etico.ng'),
+  // EAS project id — required for Expo push tokens (getExpoPushTokenAsync).
+  // `eas init` writes it to app.json extra.eas.projectId; setting it here via
+  // env is an explicit override. Empty = let the SDK read it from app config.
+  easProjectId:    process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '',
 }

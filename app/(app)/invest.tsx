@@ -4,31 +4,24 @@ import { MotiView } from 'moti'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { usePortfolioStore } from '@/store/portfolioStore'
-import { Text } from '@/ui'
+import { Text, Icon } from '@/ui'
 import { colors, spacing, radii, useThemedStyles, useEffectiveScheme } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { isEthical, ETHICAL_TICKERS } from '@/lib/ethicalTickers'
-import { Icon } from '@/ui'
 
-// Bundled artwork for each asset category card. `require` at module scope
+// Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
-const CATEGORY_IMAGES = {
-  ethical:  require('../../assets/asset-icons/ethical-stocks.png') as ImageSourcePropType,
-  nigerian: require('../../assets/asset-icons/ngx-stocks.png')     as ImageSourcePropType,
-  bonds:    require('../../assets/asset-icons/ethical-bonds.png')  as ImageSourcePropType,
-  savings:  require('../../assets/asset-icons/naira-savings.png')  as ImageSourcePropType,
+const CARD_IMAGES = {
+  stocks:  require('../../assets/asset-icons/card-ethical-stocks.png') as ImageSourcePropType,
+  bonds:   require('../../assets/asset-icons/card-bonds.png')          as ImageSourcePropType,
+  savings: require('../../assets/asset-icons/card-savings.png')        as ImageSourcePropType,
 } as const
 
 interface RiskTone {
-  // Text + icon color on the card.
-  fg:        string
-  // Full-card tint that sits behind everything (used at low opacity in
-  // light mode, at higher opacity in dark mode).
-  tint:      string
-  // Small accent used for the icon square background.
-  accent:    string
-  // Color of the card's outer border.
-  border:    string
+  fg:     string
+  tint:   string
+  accent: string
+  border: string
 }
 
 interface RiskProfile {
@@ -40,9 +33,6 @@ interface RiskProfile {
   dark:     RiskTone
 }
 
-// Dark-mode variants use richer, luminous colors on top of a darkened tint
-// so the cards read as three distinct states even under the OLED-black bg.
-// Light-mode variants keep the pastel bg / dark-ink fg pairing.
 const RISK_PROFILES: RiskProfile[] = [
   {
     key: 'low',
@@ -70,50 +60,61 @@ const RISK_PROFILES: RiskProfile[] = [
   },
 ]
 
-interface AssetCategory {
-  key:      keyof typeof CATEGORY_IMAGES
+interface Product {
+  key:      keyof typeof CARD_IMAGES
   title:    string
   subtitle: string
-  badge?:   'New' | 'Soon'
+  icon:     string
+  dark:     boolean          // is the card's left (text) area dark? → white text
+  badge?:   string
   route?:   string
 }
 
 const SCREEN_W = Dimensions.get('window').width
 const CARD_GAP = 12
 const GRID_H_PADDING = 16
-// Two cards per row, computed off screen width so centering is exact.
-const CARD_W = Math.floor((SCREEN_W - GRID_H_PADDING * 2 - CARD_GAP) / 2)
+const CONTENT_W = SCREEN_W - GRID_H_PADDING * 2
+const CARD_HEIGHT = 118
 
 export default function AssetsScreen() {
   const styles = useThemedStyles(makeStyles)
   const router = useRouter()
   const { marketData, loadMarketData } = usePortfolioStore()
 
-  // Bump this on every tab focus so the MotiView keys change and the cards
-  // re-run their stagger animation each time the user visits the tab.
+  // Bump on every tab focus so the MotiView keys change and the cards re-run
+  // their stagger animation each visit.
   const [focusKey, setFocusKey] = useState(0)
-  useFocusEffect(useCallback(() => {
-    setFocusKey(k => k + 1)
-  }, []))
+  useFocusEffect(useCallback(() => { setFocusKey(k => k + 1) }, []))
 
   useEffect(() => { if (marketData.length === 0) loadMarketData() }, [])
 
-  const ethicalCount  = useMemo(() => marketData.filter(s => isEthical(s.symbol)).length, [marketData])
+  const ethicalCount = useMemo(() => marketData.filter(s => isEthical(s.symbol)).length, [marketData])
+  const stockCount = ethicalCount || ETHICAL_TICKERS.size
 
-  // Strictly ethical now (MD directive) — the old NGX-all card is merged into
-  // the combined ethical hero below. Only the "Soon" products remain in the grid.
-  const ethicalSubtitle = `${ethicalCount || ETHICAL_TICKERS.size} ethically screened on the NGX`
-  const categories: AssetCategory[] = [
+  const products: Product[] = [
+    {
+      key: 'stocks',
+      title: 'Ethical Stocks',
+      subtitle: `${stockCount} stocks screened on the NGX`,
+      icon: 'solar:leaf-bold',
+      dark: true,
+      badge: 'Ethical',
+      route: '/(app)/market?filter=ethical',
+    },
     {
       key: 'bonds',
       title: 'Ethical Bonds',
       subtitle: 'Fixed-income instruments',
+      icon: 'solar:document-text-bold',
+      dark: false,
       badge: 'Soon',
     },
     {
       key: 'savings',
       title: 'Ethical Savings',
       subtitle: 'Grow cash the ethical way',
+      icon: 'solar:money-bag-bold',
+      dark: true,
       badge: 'Soon',
     },
   ]
@@ -121,7 +122,6 @@ export default function AssetsScreen() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }}>
-        {/* Centered header */}
         <View style={styles.header}>
           <Text variant="h1">Assets</Text>
         </View>
@@ -130,45 +130,23 @@ export default function AssetsScreen() {
           <Text variant="eyebrow" tone="muted">ETHICAL INVESTING</Text>
         </View>
 
-        <View style={styles.gridOuter}>
-          {/* Combined, centered ethical hero — both graphics on opposite
-              corners. Strictly ethical: this is the one way into the market. */}
-          <MotiView
-            key={`combo-${focusKey}`}
-            from={{ opacity: 0, translateY: 18, scale: 0.96 }}
-            animate={{ opacity: 1, translateY: 0, scale: 1 }}
-            transition={{ type: 'spring', damping: 18, stiffness: 220, mass: 0.8, delay: 60 }}
-          >
-            <CombinedEthicalCard
-              ethicalImg={CATEGORY_IMAGES.ethical}
-              ngxImg={CATEGORY_IMAGES.nigerian}
-              subtitle={ethicalSubtitle}
-              onPress={() => router.push('/(app)/market?filter=ethical')}
-            />
-          </MotiView>
-
-          {/* Remaining products (Soon) — two-up */}
-          <View style={[styles.grid, { marginTop: CARD_GAP }]}>
-            {categories.map((c, i) => (
-              <MotiView
-                key={`${c.key}-${focusKey}`}
-                from={{ opacity: 0, translateY: 18, scale: 0.94 }}
-                animate={{ opacity: 1, translateY: 0, scale: 1 }}
-                transition={{ type: 'spring', damping: 18, stiffness: 220, mass: 0.8, delay: 160 + i * 70 }}
-              >
-                <AssetCard
-                  title={c.title}
-                  subtitle={c.subtitle}
-                  image={CATEGORY_IMAGES[c.key]}
-                  badge={c.badge}
-                  onPress={c.route ? () => router.push(c.route! as never) : undefined}
-                />
-              </MotiView>
-            ))}
-          </View>
+        <View style={styles.stack}>
+          {products.map((p, i) => (
+            <MotiView
+              key={`${p.key}-${focusKey}`}
+              from={{ opacity: 0, translateY: 18, scale: 0.96 }}
+              animate={{ opacity: 1, translateY: 0, scale: 1 }}
+              transition={{ type: 'spring', damping: 18, stiffness: 220, mass: 0.8, delay: 60 + i * 80 }}
+            >
+              <ProductCard
+                product={p}
+                onPress={p.route ? () => router.push(p.route! as never) : undefined}
+              />
+            </MotiView>
+          ))}
         </View>
 
-        {/* Risk-level section */}
+        {/* By risk level — unchanged */}
         <View style={styles.riskWrap}>
           <Text variant="eyebrow" tone="muted" style={styles.riskEyebrow}>BY RISK LEVEL</Text>
           {RISK_PROFILES.map((r, i) => (
@@ -176,13 +154,10 @@ export default function AssetsScreen() {
               key={`${r.key}-${focusKey}`}
               from={{ opacity: 0, translateX: -14 }}
               animate={{ opacity: 1, translateX: 0 }}
-              transition={{ type: 'timing', duration: 320, delay: 380 + i * 90 }}
+              transition={{ type: 'timing', duration: 320, delay: 360 + i * 90 }}
               style={{ marginBottom: spacing.md }}
             >
-              <RiskCard
-                profile={r}
-                onPress={() => router.push(`/(app)/market?risk=${r.key}` as never)}
-              />
+              <RiskCard profile={r} onPress={() => router.push(`/(app)/market?risk=${r.key}` as never)} />
             </MotiView>
           ))}
         </View>
@@ -192,9 +167,68 @@ export default function AssetsScreen() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// RiskCard — full-width, gradient tint per risk level, custom
-// "risk meter" (3 stacked pips filling proportionally to the level),
-// icon in a colored square, chevron on the right.
+// ProductCard — full-width card with a full-bleed background image,
+// content overlaid on the readable (left) side: icon tile, title,
+// subtitle, and either an arrow FAB (active) or a "Soon" pill.
+// ─────────────────────────────────────────────────────────────
+function ProductCard({ product, onPress }: { product: Product; onPress?: () => void }) {
+  const styles = useThemedStyles(makeStyles)
+  const disabled = !onPress
+  const dark = product.dark
+
+  const fg      = dark ? '#FFFFFF' : '#0B1F14'
+  const subFg   = dark ? 'rgba(255,255,255,0.74)' : 'rgba(11,31,20,0.66)'
+  const tileBg  = dark ? 'rgba(255,255,255,0.16)' : 'rgba(11,31,20,0.10)'
+  // A soft scrim on the text side improves legibility over the artwork.
+  const scrim   = dark ? 'rgba(6,20,12,0.30)' : 'rgba(255,255,255,0.14)'
+
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.heroCard, pressed && !disabled && { transform: [{ scale: 0.99 }] }]}
+    >
+      {/* Explicit width/height — a New-Arch <Image> with only absoluteFill renders
+          at its intrinsic size and ignores cover, so it must be sized directly. */}
+      <Image
+        source={CARD_IMAGES[product.key]}
+        style={{ width: CONTENT_W, height: CARD_HEIGHT }}
+        resizeMode="cover"
+      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: scrim }]} />
+
+      <View style={styles.heroContent}>
+        <View style={[styles.heroTile, { backgroundColor: tileBg }]}>
+          <Icon name={product.icon} size={24} color={fg} />
+        </View>
+
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
+          <Text style={[styles.heroTitle, { color: fg }]} numberOfLines={1}>{product.title}</Text>
+          <Text style={[styles.heroSub, { color: subFg }]} numberOfLines={2}>{product.subtitle}</Text>
+        </View>
+
+        {disabled ? (
+          <View style={[styles.heroSoon, { backgroundColor: dark ? 'rgba(255,255,255,0.92)' : 'rgba(11,31,20,0.88)' }]}>
+            <Text style={[styles.heroSoonText, { color: dark ? '#0B1F14' : '#FFFFFF' }]}>Soon</Text>
+          </View>
+        ) : (
+          <View style={styles.heroFab}>
+            <Icon name="solar:arrow-right-linear" size={20} color="#0B1F14" />
+          </View>
+        )}
+      </View>
+
+      {product.badge && !disabled && (
+        <View style={[styles.heroBadge, { backgroundColor: dark ? 'rgba(255,255,255,0.18)' : 'rgba(11,31,20,0.12)' }]}>
+          <Text style={[styles.heroBadgeText, { color: fg }]}>{product.badge}</Text>
+        </View>
+      )}
+    </Pressable>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// RiskCard — unchanged from before.
 // ─────────────────────────────────────────────────────────────
 function RiskCard({ profile, onPress }: { profile: RiskProfile; onPress: () => void }) {
   const styles = useThemedStyles(makeStyles)
@@ -209,16 +243,12 @@ function RiskCard({ profile, onPress }: { profile: RiskProfile; onPress: () => v
       style={({ pressed }) => [
         styles.riskCard,
         {
-          // Dark: solid tinted card, coloured border for identity.
-          // Light: neutral surface + a coloured tint overlay below.
           backgroundColor: isDark ? tone.tint : colors.bgSubtle,
           borderColor:     isDark ? tone.border : colors.border,
         },
         pressed && { transform: [{ scale: 0.98 }] },
       ]}
     >
-      {/* Light-mode tint overlay — skipped in dark mode where the card bg
-          IS the tint. */}
       {!isDark && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: tone.tint, opacity: 0.55, borderRadius: radii.lg }]} />
       )}
@@ -238,7 +268,7 @@ function RiskCard({ profile, onPress }: { profile: RiskProfile; onPress: () => v
             style={[
               styles.riskPip,
               {
-                height: 10 + i * 6,           // 10 / 16 / 22 — signal-bar ramp
+                height: 10 + i * 6,
                 backgroundColor: i < filled ? tone.fg : 'transparent',
                 borderColor: tone.fg,
                 opacity: i < filled ? 1 : 0.4,
@@ -251,73 +281,6 @@ function RiskCard({ profile, onPress }: { profile: RiskProfile; onPress: () => v
   )
 }
 
-// Combined, centered ethical hero: the Ethical + NGX graphics pinned to
-// opposite corners with the copy centred between them.
-function CombinedEthicalCard({ ethicalImg, ngxImg, subtitle, onPress }: {
-  ethicalImg: ImageSourcePropType
-  ngxImg:     ImageSourcePropType
-  subtitle:   string
-  onPress:    () => void
-}) {
-  const styles = useThemedStyles(makeStyles)
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.comboCard, pressed && { transform: [{ scale: 0.99 }] }]}
-    >
-      <Image source={ethicalImg} style={styles.comboImgTL} resizeMode="contain" />
-      <Image source={ngxImg} style={styles.comboImgBR} resizeMode="contain" />
-      <View style={styles.comboCenter}>
-        <View style={styles.comboBadge}>
-          <Icon name="solar:leaf-bold" size={12} color={colors.accentInk} />
-          <Text style={styles.comboBadgeText}>ETHICALLY SCREENED</Text>
-        </View>
-        <Text style={styles.comboTitle}>Ethical Stocks</Text>
-        <Text style={styles.comboSubtitle} numberOfLines={1}>{subtitle}</Text>
-        <View style={styles.comboCta}>
-          <Text style={styles.comboCtaText}>Explore</Text>
-          <Icon name="solar:alt-arrow-right-linear" size={14} color={colors.textInverse} />
-        </View>
-      </View>
-    </Pressable>
-  )
-}
-
-function AssetCard({ title, subtitle, image, badge, onPress }: {
-  title:    string
-  subtitle: string
-  image:    ImageSourcePropType
-  badge?:   'New' | 'Soon'
-  onPress?: () => void
-}) {
-  const styles = useThemedStyles(makeStyles)
-  const disabled = !onPress
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        pressed && !disabled && { transform: [{ scale: 0.98 }] },
-        disabled && { opacity: 0.7 },
-      ]}
-    >
-      {badge && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      )}
-      <View style={styles.iconTop}>
-        <Image source={image} style={styles.cardImage} resizeMode="contain" />
-      </View>
-      <View style={styles.textBottom}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
-        <Text style={styles.cardSubtitle} numberOfLines={2}>{subtitle}</Text>
-      </View>
-    </Pressable>
-  )
-}
-
 const makeStyles = () => StyleSheet.create({
   header: {
     paddingTop: spacing.md,
@@ -325,132 +288,90 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
   },
   eyebrowWrap: {
-    width: SCREEN_W - GRID_H_PADDING * 2,
+    width: CONTENT_W,
     alignSelf: 'center',
     marginBottom: spacing.md,
   },
-  gridOuter: {
-    alignItems: 'center',
-  },
-  grid: {
-    width: SCREEN_W - GRID_H_PADDING * 2,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
-    justifyContent: 'flex-start',
-  },
-  comboCard: {
-    width: SCREEN_W - GRID_H_PADDING * 2,
+  stack: {
+    width: CONTENT_W,
     alignSelf: 'center',
-    minHeight: 230,
+    gap: CARD_GAP,
+  },
+  // ── Product hero cards ──
+  heroCard: {
+    width: CONTENT_W,
+    height: CARD_HEIGHT,
     borderRadius: radii.lg,
-    backgroundColor: colors.bgSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
+    backgroundColor: colors.bgSubtle,
+  },
+  heroContent: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  heroTile: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing['2xl'],
   },
-  comboImgTL: {
-    position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
-    width: 86,
-    height: 86,
-  },
-  comboImgBR: {
-    position: 'absolute',
-    bottom: spacing.md,
-    right: spacing.md,
-    width: 86,
-    height: 86,
-  },
-  comboCenter: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  comboBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSubtle,
-    marginBottom: spacing.sm,
-  },
-  comboBadgeText: {
-    fontSize: 10,
+  heroTitle: {
+    fontSize: 17,
     fontWeight: '800',
-    color: colors.accentInk,
-    letterSpacing: 0.5,
+    letterSpacing: -0.3,
   },
-  comboTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.4,
-  },
-  comboSubtitle: {
+  heroSub: {
     fontSize: 12.5,
     fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  comboCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
-    height: 38,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-  },
-  comboCtaText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textInverse,
-  },
-  card: {
-    width: CARD_W,
-    minHeight: 200,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: colors.bgSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'space-between',
-  },
-  iconTop: {
-    alignItems: 'flex-start',
-  },
-  cardImage: {
-    width: 92,
-    height: 92,
-  },
-  textBottom: {
-    marginTop: spacing.md,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.2,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
     lineHeight: 17,
   },
+  heroFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  heroSoon: {
+    height: 30,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSoonText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  heroBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+  },
+  heroBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  // ── Risk cards ──
   riskWrap: {
     marginTop: spacing['2xl'],
     paddingHorizontal: GRID_H_PADDING,
-    width: SCREEN_W - GRID_H_PADDING * 2,
+    width: CONTENT_W,
     alignSelf: 'center',
   },
   riskEyebrow: {
@@ -496,23 +417,5 @@ const makeStyles = () => StyleSheet.create({
     width: 6,
     borderWidth: 1.5,
     borderRadius: 2,
-  },
-  badge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    backgroundColor: colors.bgMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    zIndex: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.textMuted,
-    letterSpacing: 0.5,
   },
 })

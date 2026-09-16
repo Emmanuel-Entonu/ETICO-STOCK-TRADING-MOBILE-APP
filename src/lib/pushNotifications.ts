@@ -2,6 +2,7 @@ import { Platform } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
+import { config } from './config'
 import { naira } from './format'
 
 // How notifications behave when one arrives while the app is foregrounded.
@@ -163,7 +164,13 @@ export async function registerPushTokenAsync(): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const tokenRes = await Notifications.getExpoPushTokenAsync()
+    // getExpoPushTokenAsync needs the EAS projectId. Pass it explicitly when
+    // set via env; otherwise the SDK reads it from app.json extra.eas.projectId
+    // (written by `eas init`). Requires google-services.json + FCM creds to
+    // actually mint a token on Android.
+    const tokenRes = await Notifications.getExpoPushTokenAsync(
+      config.easProjectId ? { projectId: config.easProjectId } : undefined,
+    )
     const token = tokenRes.data
     if (!token) return
     await supabase.from('profiles').update({ push_token: token }).eq('id', user.id)

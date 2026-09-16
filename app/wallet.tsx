@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { View, ScrollView, Pressable, RefreshControl, StyleSheet } from 'react-native'
+import { View, ScrollView, Pressable, RefreshControl, StyleSheet, Image, useWindowDimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import { useShallow } from 'zustand/react/shallow'
-import { LinearGradient } from 'expo-linear-gradient'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
 import { syncWalletFunding } from '@/lib/monetaApi'
@@ -15,6 +14,15 @@ import { naira } from '@/lib/format'
 export default function WalletScreen() {
   const router = useRouter()
   const styles = useThemedStyles(makeStyles)
+
+  // Explicit card size from the screen width. The card bleeds nearly full-width
+  // (a bit wider than the padded text below) for presence; height follows the
+  // wallet PNG's 2.3 ratio. Driving size directly is more reliable than aspectRatio.
+  const { width: screenW } = useWindowDimensions()
+  const cardW = screenW
+  // Taller than the PNG's native 2.3 ratio for more vertical presence (the image
+  // uses resizeMode="stretch", so the extra height fills instead of letterboxing).
+  const cardH = cardW / 2.1
 
   const {
     kycStatus, walletBalance,
@@ -84,26 +92,36 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
       >
-        {/* ── Balance card ── */}
+        {/* ── Balance card — leather wallet graphic with content overlaid on the
+             left face (kept clear of the gold snap on the right). The card
+             scales with screen width via aspectRatio, so it's responsive. ── */}
         <MotiView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 300 }}
-          style={styles.balanceCard}
+          style={[styles.cardWrap, { width: cardW, height: cardH }]}
         >
-          <LinearGradient
-            colors={['#1A1D10', '#0F100B']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
+          <Image
+            source={require('../assets/brand/wallet-card.png')}
+            style={{ width: cardW, height: cardH }}
+            resizeMode="stretch"
           />
-          <View style={{ padding: spacing.xl }}>
-            <Text style={styles.balanceEyebrow}>WALLET BALANCE</Text>
-            <Text style={styles.balanceValue}>{naira(walletBalance)}</Text>
-            <Row gap="sm" align="center" style={{ marginTop: spacing.sm }}>
-              <Icon name="solar:shield-check-bold" size={14} color="rgba(255,255,255,0.6)" />
-              <Text style={styles.balanceSub}>Funds you add are tracked here</Text>
-            </Row>
+          <View style={styles.cardContent}>
+            <View>
+              <Text style={styles.balanceEyebrow}>WALLET BALANCE</Text>
+              <Text
+                style={styles.balanceValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
+                {naira(walletBalance)}
+              </Text>
+              <Row gap="sm" align="center" style={{ marginTop: spacing.xs }}>
+                <Icon name="solar:shield-check-bold" size={13} color="rgba(255,255,255,0.6)" />
+                <Text style={styles.balanceSub}>Funds you add are tracked here</Text>
+              </Row>
+            </View>
           </View>
         </MotiView>
 
@@ -229,16 +247,24 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.bgSubtle,
   },
-  balanceCard: {
-    borderRadius: radii.xl,
+  // Size is set inline from the screen width (see component). Negative side
+  // margins let it bleed past the ScrollView's spacing.xl padding so the card
+  // sits wider than the text below. overflow:hidden clips any stray overscale.
+  cardWrap: {
+    alignSelf: 'center',
+    marginHorizontal: -spacing.xl,   // full-bleed past the ScrollView padding
     overflow: 'hidden',
-    minHeight: 150,
-    backgroundColor: '#0F100B',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 8,
+  },
+  // Overlay sits on the flat left leather face: kept clear of the gold snap on
+  // the right (paddingRight) and the peeking card up top (paddingTop). Percentage
+  // insets keep the layout correct as the card scales.
+  cardContent: {
+    ...StyleSheet.absoluteFillObject,
+    paddingLeft: '7%',
+    paddingRight: '24%',
+    paddingTop: '11%',
+    paddingBottom: '11%',
+    justifyContent: 'center',
   },
   balanceEyebrow: {
     fontSize: 11,
@@ -247,12 +273,12 @@ const makeStyles = () => StyleSheet.create({
     letterSpacing: 1.4,
   },
   balanceValue: {
-    fontSize: 38,
+    fontSize: 30,
+    lineHeight: 40,        // explicit line height — without it Android clips the tall glyphs
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: -1.2,
-    marginTop: spacing.sm,
-    lineHeight: 44,
+    letterSpacing: -0.5,
+    marginTop: 2,
   },
   balanceSub: {
     fontSize: 12,

@@ -35,15 +35,14 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
-    // FLAG_SECURE (below) blocks screenshots + screen-recording + the
-    // task-switcher preview — banking-app standard. It is DISABLED for now so
-    // the team can capture screenshots during testing. RE-ENABLE BEFORE
-    // PRODUCTION by uncommenting the setFlags call. The privacyOverlay in
-    // onPause still hides content in the task switcher regardless.
-    // window.setFlags(
-    //   WindowManager.LayoutParams.FLAG_SECURE,
-    //   WindowManager.LayoutParams.FLAG_SECURE
-    // )
+    // FLAG_SECURE blocks screenshots + screen-recording + the task-switcher
+    // preview — banking-app standard. ENABLED. (To capture screenshots during
+    // testing, temporarily comment this out.) The privacyOverlay in onPause adds
+    // belt-and-braces coverage during resume transitions.
+    window.setFlags(
+      WindowManager.LayoutParams.FLAG_SECURE,
+      WindowManager.LayoutParams.FLAG_SECURE
+    )
     super.onCreate(null)
   }
 

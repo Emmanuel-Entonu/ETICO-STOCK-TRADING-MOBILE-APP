@@ -16,3 +16,12 @@ android/app/build/
 
 expo-env.d.ts
 # @end expo-cli
+# Firebase / FCM — config file ships in the app but keep it out of the public repo
+google-services.json
+android/app/google-services.json
+# NEVER commit: FCM V1 service-account key (server secret)
+*service-account*.json
+firebase-*.json
+
+# filter-branch temp dir (leftover)
+.git-rewrite/
