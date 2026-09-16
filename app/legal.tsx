@@ -5,13 +5,17 @@ import { Text, Card, Row, Icon, Divider, toast } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { config } from '@/lib/config'
 
-// Legal & policies hub. Google Play requires a privacy policy that's reachable
-// from within the app (and linked in the store listing). These open the hosted
-// pages on the ETICO site; keep those URLs live.
-const LINKS = [
-  { icon: 'solar:shield-check-bold', label: 'Privacy Policy',   url: `${config.siteBase}/privacy` },
-  { icon: 'solar:document-text-bold', label: 'Terms of Service', url: `${config.siteBase}/terms` },
-  { icon: 'solar:info-circle-bold',  label: 'Risk Disclosure',  url: `${config.siteBase}/risk-disclosure` },
+// Legal & policies hub. Privacy Policy and Terms of Service render natively
+// in-app (content in src/lib/legalContent.ts). Risk Disclosure opens the hosted
+// page on the ETICO site.
+type LegalLink =
+  | { icon: string; label: string; route: string }
+  | { icon: string; label: string; url: string }
+
+const LINKS: LegalLink[] = [
+  { icon: 'solar:shield-check-bold',  label: 'Privacy Policy',   route: '/privacy' },
+  { icon: 'solar:document-text-bold', label: 'Terms of Service', route: '/terms' },
+  { icon: 'solar:info-circle-bold',   label: 'Risk Disclosure',  url: `${config.siteBase}/risk-disclosure` },
 ]
 
 export default function LegalScreen() {
@@ -25,6 +29,11 @@ export default function LegalScreen() {
     } catch {
       toast.warn('Could not open link', 'Please visit etico.ng from your browser.')
     }
+  }
+
+  const onPress = (l: LegalLink) => {
+    if ('route' in l) router.push(l.route as never)
+    else open(l.url)
   }
 
   return (
@@ -43,7 +52,7 @@ export default function LegalScreen() {
           {LINKS.map((l, i) => (
             <View key={l.label}>
               <Pressable
-                onPress={() => open(l.url)}
+                onPress={() => onPress(l)}
                 style={({ pressed }) => ({ paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: pressed ? colors.bgMuted : 'transparent' })}
               >
                 <Row justify="space-between" align="center">

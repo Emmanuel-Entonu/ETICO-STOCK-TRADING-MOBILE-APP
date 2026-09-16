@@ -223,6 +223,8 @@ export default function RootLayout() {
         <Stack.Screen name="wallet" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="watchlist" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="delete-account" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="contact" options={{ animation: 'slide_from_right' }} />
