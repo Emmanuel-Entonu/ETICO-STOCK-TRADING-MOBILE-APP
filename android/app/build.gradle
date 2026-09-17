@@ -110,6 +110,15 @@ def enableProguardInReleaseBuilds = (findProperty('android.enableProguardInRelea
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+// Release signing — credentials live in android/keystore.properties (gitignored).
+// Falls back to the debug key when the file is absent (e.g. fresh clone) so dev
+// builds keep working; a real release AAB requires the properties file.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 
@@ -121,7 +130,7 @@ android {
         applicationId 'ng.moneta.capital'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode 3
         versionName "1.0.0"
     }
     signingConfigs {
@@ -131,15 +140,22 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['RELEASE_STORE_FILE'])
+                storePassword keystoreProps['RELEASE_STORE_PASSWORD']
+                keyAlias keystoreProps['RELEASE_KEY_ALIAS']
+                keyPassword keystoreProps['RELEASE_KEY_PASSWORD']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Real release key when keystore.properties is present; debug key otherwise.
+            signingConfig keystorePropsFile.exists() ? signingConfigs.release : signingConfigs.debug
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

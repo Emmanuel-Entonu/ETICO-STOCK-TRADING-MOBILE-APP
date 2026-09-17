@@ -25,3 +25,8 @@ firebase-*.json
 
 # filter-branch temp dir (leftover)
 .git-rewrite/
+
+# Android release signing — NEVER commit the keystore or its passwords
+android/keystore.properties
+*.keystore
+!android/app/debug.keystore

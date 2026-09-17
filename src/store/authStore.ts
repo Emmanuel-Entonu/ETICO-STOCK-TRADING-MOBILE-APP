@@ -164,12 +164,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         vaAccountName: profile.va_account_name ?? null,
       })
     } else if (!fetchError || fetchError.code === 'PGRST116') {
-      await supabase.from('profiles').upsert({
-        id: user.id,
-        email: user.email ?? null,
-        kyc_status: 'pending',
-        wallet_balance: 0,
-      })
+      // Create the row for a brand-new user. Must be INSERT-only (DO NOTHING):
+      // a plain upsert compiles to INSERT ... ON CONFLICT DO UPDATE, which needs
+      // UPDATE privilege on every column in the payload — and wallet_balance's
+      // UPDATE is revoked from clients (float-theft guard). Without ignoreDuplicates
+      // the insert is denied and the profile never gets created, which then blocks
+      // PIN setup and onboarding for every new account.
+      const { error: createErr } = await supabase
+        .from('profiles')
+        .upsert(
+          { id: user.id, email: user.email ?? null, kyc_status: 'pending', wallet_balance: 0 },
+          { onConflict: 'id', ignoreDuplicates: true },
+        )
+      if (createErr) console.warn('[auth] profile create failed:', createErr.message)
     }
     set({ profileReady: true })
     } finally {

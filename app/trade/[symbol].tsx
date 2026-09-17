@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, ScrollView, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { MotiView } from 'moti'
 import Animated, { useSharedValue, useAnimatedStyle, withSequence, withTiming, Easing } from 'react-native-reanimated'
@@ -44,6 +44,7 @@ export default function TradeScreen() {
   const { marketData, positions, orderLoading, orderResult, placeOrder, clearOrderResult, loadMarketData, loadAccount } = usePortfolioStore()
   const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, debitWallet, creditWallet } = useAuthStore()
   const unlocked = usePinStore((s) => s.unlockedThisSession)
+  const insets = useSafeAreaInsets()
 
   const watched = useWatchlistStore(s => s.symbols.includes((symbol ?? '').toUpperCase()))
   const toggleWatch = useWatchlistStore(s => s.toggle)
@@ -273,7 +274,7 @@ export default function TradeScreen() {
       {/* Sticky Buy / Sell bar — hidden while the order sheet is open so it
           doesn't peek out beneath the sheet. */}
       {!orderSheetOpen && (
-        <View style={styles.tradeBar}>
+        <View style={[styles.tradeBar, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.sm }]}>
           <View style={{ flex: 1 }}>
             <Button title="Buy" variant="primary" onPress={() => { Haptics.selectionAsync().catch(() => {}); setSide('BUY'); setOrderSheetOpen(true) }} />
           </View>
@@ -288,7 +289,7 @@ export default function TradeScreen() {
         <View style={styles.orderRoot}>
           <Pressable style={styles.orderBackdrop} onPress={() => setOrderSheetOpen(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.orderSheet}>
+            <View style={[styles.orderSheet, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.lg }]}>
             <View style={styles.orderHandle} />
             <Row justify="space-between" align="center" style={{ marginBottom: spacing.lg }}>
               <Text variant="h2">{side === 'BUY' ? 'Buy' : 'Sell'} {stock.symbol}</Text>
@@ -1271,7 +1272,7 @@ const makeStyles = () => StyleSheet.create({
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     padding: spacing.xl,
-    paddingBottom: spacing['4xl'],
+    paddingBottom: spacing['5xl'],   // clears the API 35 edge-to-edge gesture bar
     maxHeight: '90%',
     borderTopWidth: 1,
     borderColor: colors.border,
