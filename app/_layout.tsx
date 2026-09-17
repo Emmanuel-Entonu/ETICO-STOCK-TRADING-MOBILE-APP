@@ -64,8 +64,10 @@ function AuthGate() {
       return
     }
 
-    // 5. Nothing gating them; bounce out of the auth group if we're still there.
-    if (inAuthGroup) router.replace('/(app)')
+    // 5. Nothing gating them; bounce out of the auth group if we're still there
+    //    — EXCEPT the KYC route, which a verified user can re-enter on purpose to
+    //    redo KYC after a CSCS rejection. Bouncing it made "Redo KYC" a no-op.
+    if (inAuthGroup && !inKycRoute) router.replace('/(app)')
   }, [user, loading, profileReady, kycStatus, hasPin, unlockedThisSession, segments])
 
   return null
