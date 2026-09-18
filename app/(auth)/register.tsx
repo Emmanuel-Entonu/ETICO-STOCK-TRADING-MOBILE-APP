@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar'
 import { Link, useRouter } from 'expo-router'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
-import { validateEmail, validatePassword, validateFullName, validateNigerianPhone } from '@/lib/validation'
+import { validateEmail, validatePassword, validateFullName, validateNigerianPhone, passwordRules, passwordScore } from '@/lib/validation'
 import { Text, Button, Row, Icon } from '@/ui'
 import { colors, spacing, shadow } from '@/theme'
 import { EticoMark } from '@/components/EticoMark'
@@ -164,7 +164,7 @@ export default function RegisterScreen() {
               icon="solar:lock-password-linear"
               value={password}
               onChangeText={(t: string) => { setPassword(t); clearField('password') }}
-              placeholder="At least 8 characters, letters & numbers"
+              placeholder="Create a strong password"
               secureTextEntry={!showPw}
               autoCapitalize="none"
               autoComplete="password-new"
@@ -175,6 +175,9 @@ export default function RegisterScreen() {
                 </Pressable>
               }
             />
+
+            <PasswordStrength password={password} />
+
             <IconInput
               label="CONFIRM PASSWORD"
               icon="solar:lock-password-linear"
@@ -215,6 +218,47 @@ export default function RegisterScreen() {
           </Row>
         </View>
       </KeyboardAvoidingView>
+    </View>
+  )
+}
+
+// Live password strength meter + requirements checklist. Renders once the user
+// starts typing; the bar and each row update as they type.
+function PasswordStrength({ password }: { password: string }) {
+  if (!password) return null
+  const rules = passwordRules(password)
+  const score = passwordScore(password)
+  const label = score <= 2 ? 'Weak' : score < 5 ? 'Medium' : 'Strong'
+  const barColor = score <= 2 ? colors.negative : score < 5 ? colors.warning : colors.positive
+
+  const items = [
+    { ok: rules.length,  label: 'At least 8 characters' },
+    { ok: rules.number,  label: 'At least 1 number' },
+    { ok: rules.lower,   label: 'At least 1 lowercase letter' },
+    { ok: rules.upper,   label: 'At least 1 uppercase letter' },
+    { ok: rules.special, label: 'At least 1 special character' },
+  ]
+
+  return (
+    <View style={{ marginTop: -spacing.sm, marginBottom: spacing.lg }}>
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.bgSubtle, overflow: 'hidden' }}>
+        <View style={{ height: 6, borderRadius: 3, width: `${(score / 5) * 100}%`, backgroundColor: barColor }} />
+      </View>
+      <Text variant="smallStrong" style={{ marginTop: spacing.md, color: colors.text }}>
+        {score < 5 ? `${label} password. Must contain:` : 'Strong password'}
+      </Text>
+      <View style={{ marginTop: spacing.sm, gap: 6 }}>
+        {items.map((it) => (
+          <Row key={it.label} gap="sm" align="center">
+            <Icon
+              name={it.ok ? 'solar:check-circle-bold' : 'solar:close-circle-bold'}
+              size={16}
+              color={it.ok ? colors.positive : colors.textSubtle}
+            />
+            <Text variant="small" style={{ color: it.ok ? colors.positive : colors.textMuted }}>{it.label}</Text>
+          </Row>
+        ))}
+      </View>
     </View>
   )
 }

@@ -40,6 +40,12 @@ interface PortfolioState {
   reset: () => void
 }
 
+// Single-flight guard for the market fetch. BrandSplash (cold-start) and the
+// Market/Invest screens can all call loadMarketData near-simultaneously; without
+// this each call fires ~60 per-symbol quote requests, so the proxy got hit with
+// 2–3 concurrent storms on launch. Share the in-flight promise instead.
+let _marketInFlight: Promise<void> | null = null
+
 export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   account: null,
   positions: [],
@@ -128,6 +134,9 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   },
 
   loadMarketData: async () => {
+    // Dedup concurrent callers (see _marketInFlight above) — return the shared
+    // promise instead of firing a second quote storm.
+    if (_marketInFlight) return _marketInFlight
     // Cache-first paint: previous quotes appear instantly on Market/Home,
     // then the live fetch replaces them. Prevents the "no stocks yet" flash.
     if (get().marketData.length === 0) {
@@ -135,16 +144,22 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
       if (cached && get().marketData.length === 0) set({ marketData: cached })
     }
     set({ loadingMarket: true, apiStatus: null })
-    try {
-      const fresh = await getMarketData()
-      set({ marketData: fresh })
-      cacheSet('market', fresh)
-    } catch (e) {
-      const msg = (e as Error).message ?? String(e)
-      // If we already painted a cached copy, keep it visible instead of wiping.
-      if (get().marketData.length === 0) set({ marketData: [] })
-      set({ apiStatus: `Market data error: ${msg}` })
-    } finally { set({ loadingMarket: false }) }
+    _marketInFlight = (async () => {
+      try {
+        const fresh = await getMarketData()
+        set({ marketData: fresh })
+        cacheSet('market', fresh)
+      } catch (e) {
+        const msg = (e as Error).message ?? String(e)
+        // If we already painted a cached copy, keep it visible instead of wiping.
+        if (get().marketData.length === 0) set({ marketData: [] })
+        set({ apiStatus: `Market data error: ${msg}` })
+      } finally {
+        set({ loadingMarket: false })
+        _marketInFlight = null
+      }
+    })()
+    return _marketInFlight
   },
 
   placeOrder: async (order, idempotencyKey) => {

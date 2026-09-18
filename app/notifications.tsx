@@ -28,7 +28,7 @@ const TYPE_ICON: Record<NotifType, string> = {
 export default function NotificationsScreen() {
   const router = useRouter()
   const { pacOrders, loadOrders } = usePortfolioStore()
-  const { pacAccountId, kycStatus, cacsStatus } = useAuthStore()
+  const { pacAccountId, kycStatus, cacsStatus, cacsRejectionReason } = useAuthStore()
   const { items, sync, markRead, markAllRead, remove } = useNotificationStore()
 
   useEffect(() => {
@@ -36,8 +36,8 @@ export default function NotificationsScreen() {
   }, [pacAccountId])
 
   useEffect(() => {
-    sync(pacOrders, { kycStatus, cacsStatus })
-  }, [pacOrders, kycStatus, cacsStatus])
+    sync(pacOrders, { kycStatus, cacsStatus, cacsRejectionReason })
+  }, [pacOrders, kycStatus, cacsStatus, cacsRejectionReason])
 
   const hasUnread = items.some(n => !n.read)
 

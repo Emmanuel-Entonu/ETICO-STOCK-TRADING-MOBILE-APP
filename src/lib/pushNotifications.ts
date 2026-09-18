@@ -79,22 +79,25 @@ export async function notifyTrade(opts: {
  * local time. Idempotent: clears any previously-scheduled market-open
  * reminders first so we don't stack duplicates on every launch.
  */
-export async function scheduleMarketOpenReminders(): Promise<void> {
+export async function scheduleMarketReminders(): Promise<void> {
   try {
-    // Clear any previously-scheduled market-open reminders first so we never
-    // stack duplicates. Match on BOTH the `kind` tag AND the title — older
-    // builds scheduled these without the tag, so a tag-only sweep left them
-    // behind and the user accumulated several identical "market open" alerts
-    // (the reported "sent ~5 times"). Matching the title reclaims those too.
+    // Clear any previously-scheduled market reminders first so we never stack
+    // duplicates. Match on BOTH the `kind` tag AND the titles — older builds
+    // scheduled these without the tag, so a tag-only sweep left them behind and
+    // the user accumulated several identical alerts (the reported "sent ~5
+    // times"). Matching the titles reclaims those too.
     const all = await Notifications.getAllScheduledNotificationsAsync()
     for (const n of all) {
       const kind = (n.content?.data as { kind?: string } | undefined)?.kind
       const title = n.content?.title ?? ''
-      if (kind === 'market-open' || title === 'The NGX is open') {
+      if (kind === 'market-open' || kind === 'market-close' ||
+          title === 'The NGX is open' || title === 'The NGX has closed') {
         await Notifications.cancelScheduledNotificationAsync(n.identifier)
       }
     }
-    // expo weekday: 1=Sunday … 7=Saturday, so Mon–Fri = 2..6.
+    // NGX trades weekdays 09:00–14:30 WAT. expo weekday: 1=Sunday … 7=Saturday,
+    // so Mon–Fri = 2..6. One open reminder (09:00) + one close reminder (14:30)
+    // per weekday, all repeating.
     for (const weekday of [2, 3, 4, 5, 6]) {
       await Notifications.scheduleNotificationAsync({
         content: {
@@ -104,9 +107,38 @@ export async function scheduleMarketOpenReminders(): Promise<void> {
         },
         trigger: { weekday, hour: 9, minute: 0, repeats: true, channelId: CHANNEL_ID },
       })
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'The NGX has closed',
+          body: 'Trading is closed for today (it reopens 09:00 WAT on the next business day). Any pending orders carry over.',
+          data: { kind: 'market-close', route: '/(app)/market' },
+        },
+        trigger: { weekday, hour: 14, minute: 30, repeats: true, channelId: CHANNEL_ID },
+      })
     }
   } catch (e) {
-    console.warn('[push] market-open reminders failed:', (e as Error).message)
+    console.warn('[push] market reminders failed:', (e as Error).message)
+  }
+}
+
+// Back-compat alias — older callers imported the open-only name.
+export const scheduleMarketOpenReminders = scheduleMarketReminders
+
+/** One-time welcome push, the first time notifications are set up. */
+export async function maybeNotifyWelcome(): Promise<void> {
+  try {
+    if (await AsyncStorage.getItem('notif:welcome')) return
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Welcome to ETICO',
+        body: 'Ethical investing on the Nigerian Exchange. Verify your identity to start trading.',
+        data: { route: '/(app)' },
+      },
+      trigger: null,
+    })
+    await AsyncStorage.setItem('notif:welcome', '1')
+  } catch (e) {
+    console.warn('[push] welcome failed:', (e as Error).message)
   }
 }
 
@@ -129,7 +161,7 @@ export async function notifyOrderFilled(opts: {
   }
 }
 
-/** One-time alert when the user's CSCS/CACS account is assigned/approved. */
+/** Alert when the user's CSCS/CACS account is approved. */
 async function notifyCscsAssigned(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
@@ -141,21 +173,50 @@ async function notifyCscsAssigned(): Promise<void> {
   })
 }
 
+// Reviewer stores rejection reasons joined by " • "; show just the first.
+function firstReason(reason?: string | null): string {
+  const first = (reason ?? '').split('•').map(s => s.trim()).filter(Boolean)[0]
+  return first ?? ''
+}
+
+/** Alert when the user's CSCS/CACS review was rejected. */
+async function notifyCscsRejected(reason?: string | null): Promise<void> {
+  const r = firstReason(reason)
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'CSCS verification needs attention',
+      body: r
+        ? `Your CSCS review couldn't be approved: ${r}. Tap to redo your KYC.`
+        : "Your CSCS review couldn't be approved. Tap to fix it and redo your KYC.",
+      data: { route: '/(auth)/kyc' },
+    },
+    trigger: null,
+  })
+}
+
 /**
- * Fire once-off account-event notifications when a status transitions. Uses
- * AsyncStorage flags so each event only notifies a single time.
- * (Wallet funding credit/debit notifications will be added once PAC funding
- * is wired — they belong here too.)
+ * Fire a tray notification when the CSCS review status TRANSITIONS to approved
+ * or rejected — never on every foreground/login. We persist the last CSCS
+ * status we reacted to; a notification only fires when the current status
+ * differs from it. This naturally handles a redo (rejected → pending → rejected
+ * re-notifies) without spamming.
  */
-export async function maybeNotifyAccountEvents(status: { kycStatus?: string | null; cacsStatus?: string | null }): Promise<void> {
+export async function maybeNotifyAccountEvents(status: {
+  kycStatus?: string | null
+  cacsStatus?: string | null
+  cacsRejectionReason?: string | null
+}): Promise<void> {
   try {
-    if (status.cacsStatus === 'approved') {
-      const done = await AsyncStorage.getItem('notif:cscs-approved')
-      if (!done) {
-        await notifyCscsAssigned()
-        await AsyncStorage.setItem('notif:cscs-approved', '1')
-      }
-    }
+    const cacs = status.cacsStatus ?? null
+    if (!cacs) return
+    const KEY = 'notif:cscs-last'
+    const last = await AsyncStorage.getItem(KEY)
+    if (cacs === last) return                 // no change → no notification
+    if (cacs === 'approved')      await notifyCscsAssigned()
+    else if (cacs === 'rejected') await notifyCscsRejected(status.cacsRejectionReason)
+    // Record every status (incl. pending/not_submitted) so we only fire on real
+    // transitions into approved/rejected, and a later re-rejection still fires.
+    await AsyncStorage.setItem(KEY, cacs)
   } catch (e) {
     console.warn('[push] account events failed:', (e as Error).message)
   }

@@ -37,15 +37,41 @@ export function validateEmail(raw: string): ValidResult<string> {
   return { ok: true, value: v }
 }
 
+// Individual password requirements — drives the live checklist + strength meter
+// on the sign-up screen, and the same rules gate validatePassword below.
+export interface PasswordRules {
+  length: boolean   // ≥ 8 characters
+  number: boolean   // ≥ 1 digit
+  lower: boolean    // ≥ 1 lowercase letter
+  upper: boolean    // ≥ 1 uppercase letter
+  special: boolean  // ≥ 1 non-alphanumeric
+}
+
+export function passwordRules(raw: string): PasswordRules {
+  const s = typeof raw === 'string' ? raw : ''
+  return {
+    length: s.length >= 8,
+    number: /\d/.test(s),
+    lower:  /[a-z]/.test(s),
+    upper:  /[A-Z]/.test(s),
+    special: /[^A-Za-z0-9]/.test(s),
+  }
+}
+
+/** 0–5: how many requirements the password satisfies. */
+export function passwordScore(raw: string): number {
+  const r = passwordRules(raw)
+  return [r.length, r.number, r.lower, r.upper, r.special].filter(Boolean).length
+}
+
 export function validatePassword(raw: string): ValidResult<string> {
   if (typeof raw !== 'string' || raw.length === 0) {
     return { ok: false, error: 'Password is required' }
   }
-  if (raw.length < 8) return { ok: false, error: 'Password must be at least 8 characters' }
   if (raw.length > 72) return { ok: false, error: 'Password is too long (max 72 characters)' }
-  // Require at least one letter and one digit — cheap defense against weak PWs
-  if (!/[a-zA-Z]/.test(raw) || !/\d/.test(raw)) {
-    return { ok: false, error: 'Password must include letters and numbers' }
+  const r = passwordRules(raw)
+  if (!r.length || !r.number || !r.lower || !r.upper || !r.special) {
+    return { ok: false, error: 'Password must be 8+ characters with an uppercase, lowercase, number and special character' }
   }
   return { ok: true, value: raw }
 }

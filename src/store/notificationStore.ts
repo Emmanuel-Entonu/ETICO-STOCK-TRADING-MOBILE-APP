@@ -20,6 +20,7 @@ export interface Notif {
 interface AccountStatus {
   kycStatus?: string | null
   cacsStatus?: string | null
+  cacsRejectionReason?: string | null
 }
 
 interface NotifState {
@@ -50,7 +51,7 @@ function buildDerived(orders: PacOrderListItem[], status: AccountStatus): Notif[
     read: false,
   })
 
-  // Account setup reminders.
+  // Account setup reminders / CSCS review outcome.
   if (status.kycStatus && status.kycStatus !== 'verified') {
     out.push({
       id: 'acct:kyc',
@@ -61,12 +62,25 @@ function buildDerived(orders: PacOrderListItem[], status: AccountStatus): Notif[
       read: false,
       route: '/(auth)/kyc',
     })
+  } else if (status.cacsStatus === 'rejected') {
+    const r = (status.cacsRejectionReason ?? '').split('•').map(s => s.trim()).filter(Boolean)[0]
+    out.push({
+      id: 'acct:cacs-rejected',
+      type: 'account',
+      title: 'CSCS verification needs attention',
+      body: r
+        ? `Your CSCS review couldn't be approved: ${r}. Tap to redo your KYC.`
+        : "Your CSCS review couldn't be approved. Tap to fix it and redo your KYC.",
+      createdAt: new Date().toISOString(),
+      read: false,
+      route: '/(auth)/kyc',
+    })
   } else if (status.cacsStatus && status.cacsStatus !== 'approved') {
     out.push({
       id: 'acct:cacs',
       type: 'account',
       title: 'Finish your NGX setup',
-      body: 'Submit your CSCS/CACS details to start placing trades.',
+      body: 'Your CSCS/CACS details are under review by PAC Securities. Trading unlocks once approved.',
       createdAt: new Date().toISOString(),
       read: false,
       route: '/(app)/account',

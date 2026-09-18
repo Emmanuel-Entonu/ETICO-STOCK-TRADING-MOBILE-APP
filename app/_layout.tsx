@@ -13,7 +13,7 @@ import { useThemeStore, resolvePalette, resolveScheme, setActivePalette, colors 
 import { ToastHost, Loader } from '@/ui'
 import { BrandSplash } from '@/components/BrandSplash'
 import * as Notifications from 'expo-notifications'
-import { setupNotifications, registerPushTokenAsync, scheduleMarketOpenReminders, maybeNotifyAccountEvents } from '@/lib/pushNotifications'
+import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome, maybeNotifyAccountEvents } from '@/lib/pushNotifications'
 
 const LOGIN_ROUTES = new Set(['welcome', 'login', 'register', 'reset'])
 
@@ -170,7 +170,7 @@ export default function RootLayout() {
   // push token for later server pushes, and route when a notification is tapped.
   useEffect(() => {
     setupNotifications().then((granted) => {
-      if (granted) { registerPushTokenAsync(); scheduleMarketOpenReminders() }
+      if (granted) { registerPushTokenAsync(); scheduleMarketReminders(); maybeNotifyWelcome() }
     })
     const sub = Notifications.addNotificationResponseReceivedListener((res) => {
       const route = (res.notification.request.content.data as { route?: string })?.route
@@ -184,9 +184,10 @@ export default function RootLayout() {
   // funding is wired.
   const kycStatus = useAuthStore((s) => s.kycStatus)
   const cacsStatus = useAuthStore((s) => s.cacsStatus)
+  const cacsRejectionReason = useAuthStore((s) => s.cacsRejectionReason)
   useEffect(() => {
-    maybeNotifyAccountEvents({ kycStatus, cacsStatus })
-  }, [kycStatus, cacsStatus])
+    maybeNotifyAccountEvents({ kycStatus, cacsStatus, cacsRejectionReason })
+  }, [kycStatus, cacsStatus, cacsRejectionReason])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -207,7 +208,7 @@ export default function RootLayout() {
           const port = usePortfolioStore.getState()
           port.loadOrders(s.pacAccountId).then(() => {
             const a = useAuthStore.getState()
-            useNotificationStore.getState().sync(usePortfolioStore.getState().pacOrders, { kycStatus: a.kycStatus, cacsStatus: a.cacsStatus })
+            useNotificationStore.getState().sync(usePortfolioStore.getState().pacOrders, { kycStatus: a.kycStatus, cacsStatus: a.cacsStatus, cacsRejectionReason: a.cacsRejectionReason })
           }).catch(() => {})
         }
       } else if (state === 'background') {

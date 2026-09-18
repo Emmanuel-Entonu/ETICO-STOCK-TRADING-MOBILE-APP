@@ -37,10 +37,11 @@ export default function HomeScreen() {
       cancelOrder: s.cancelOrder, apiStatus: s.apiStatus,
     }))
   )
-  const { user, pacAccountId, kycStatus, cacsStatus, walletBalance } = useAuthStore(
+  const { user, pacAccountId, kycStatus, cacsStatus, cacsRejectionReason, walletBalance } = useAuthStore(
     useShallow(s => ({
       user: s.user, pacAccountId: s.pacAccountId,
-      kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, walletBalance: s.walletBalance,
+      kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, cacsRejectionReason: s.cacsRejectionReason,
+      walletBalance: s.walletBalance,
     }))
   )
   const [tab, setTab] = useState<Tab>('holdings')
@@ -52,7 +53,7 @@ export default function HomeScreen() {
 
   useEffect(() => { if (pacAccountId) loadPositions(pacAccountId) }, [pacAccountId])
   useEffect(() => { if (tab === 'orders' && pacAccountId) loadOrders(pacAccountId) }, [tab, pacAccountId])
-  useEffect(() => { syncNotifs(pacOrders, { kycStatus, cacsStatus }) }, [pacOrders, kycStatus, cacsStatus, syncNotifs])
+  useEffect(() => { syncNotifs(pacOrders, { kycStatus, cacsStatus, cacsRejectionReason }) }, [pacOrders, kycStatus, cacsStatus, cacsRejectionReason, syncNotifs])
 
   const totalMarketValue = positions.reduce((s, p) => s + p.marketValue, 0)
   const totalCost = positions.reduce((s, p) => s + p.averageCost * p.quantity, 0)

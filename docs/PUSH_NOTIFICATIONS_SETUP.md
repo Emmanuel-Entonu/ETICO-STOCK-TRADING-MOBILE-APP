@@ -1,125 +1,100 @@
-# ETICO — Push Notifications (Firebase / FCM + Expo) Setup
+# ETICO — Push Notifications (Firebase / FCM + Expo)
 
-**Audience:** whoever owns the Firebase + Expo/EAS accounts for ETICO.
-**Goal:** turn on **remote** push (order fills, settlement, account events while the
-app is closed). **Local** notifications (trade confirmations shown immediately)
-already work with no setup.
-
----
-
-## How the app already works (no code changes needed)
-
-- The app uses **`expo-notifications`** and mints an **Expo push token** via
-  `getExpoPushTokenAsync` (see [`src/lib/pushNotifications.ts`](../src/lib/pushNotifications.ts)).
-  That token is saved to `profiles.push_token` in Supabase for the backend to use.
-- Sending is done through **Expo's Push service** (`https://exp.host/--/api/v2/push/send`),
-  which forwards to **FCM** (Android) and **APNs** (iOS). You do **not** hardcode
-  any FCM key in the app — you configure the credentials **once** in EAS/Expo, and
-  Expo signs the pushes.
-- `app.json` already points Android at `./google-services.json`
-  (`android.googleServicesFile`) and has the EAS `projectId`
-  (`08384831-fdc8-4bd3-a4e9-67eeb5495735`). Bundle/package id: **`ng.moneta.capital`**.
-
-**Current blocker:** `google-services.json` is **missing from the repo** (it's
-gitignored). Without it the Android build can't register with FCM, so
-`getExpoPushTokenAsync` fails and remote push silently no-ops. Everything below
-fixes that.
+**Audience:** ETICO mobile engineering.
+**Status (2026-09-18):** Android remote push is **fully configured**. Only a fresh
+build + on-device verification remain. iOS (APNs) is not set up yet.
 
 ---
 
-## Part A — Firebase (Android)
+## How push works in this app
 
-1. **Create/þopen the Firebase project** at <https://console.firebase.google.com>
-   (one project for ETICO is fine — reuse if it exists).
-2. **Add an Android app**: package name **exactly** `ng.moneta.capital`.
-   (App nickname/SHA-1 are optional for FCM; SHA-1 is only needed for Google
-   sign-in / App Check.)
-3. **Download `google-services.json`** and place it at the **repo root**:
-   `Moneta Stock  Trading App/google-services.json`. (It stays gitignored — hand
-   it to each builder, or add it to EAS as a secret file; see Part C.)
-4. **Enable the API**: in Google Cloud console for the same project, enable
-   **Firebase Cloud Messaging API (V1)**
-   (APIs & Services → Library → "Firebase Cloud Messaging API").
-   The legacy "Cloud Messaging API (Legacy)" / server key is **not** needed —
-   Expo uses FCM **V1**.
-5. **Create an FCM V1 service-account key** so Expo can send to FCM:
-   Firebase console → **Project settings → Service accounts → Generate new
-   private key** → downloads a JSON. Keep it secret (do **not** commit it).
+- The app uses **`expo-notifications`** and mints an **Expo push token**
+  (`getExpoPushTokenAsync`, see [`src/lib/pushNotifications.ts`](../src/lib/pushNotifications.ts)).
+  That token is saved to Supabase `profiles.push_token` for the backend to use.
+- Delivery goes through **Expo's Push service** (`https://exp.host/--/api/v2/push/send`),
+  which forwards to **FCM** (Android) and **APNs** (iOS). The app holds **no** FCM/APNs
+  secret — credentials live once in EAS, and Expo signs the pushes.
+- **Local** notifications (trade confirmations) already work with no setup.
+  **Remote** push (fills / settlement / account events while the app is closed)
+  needs the FCM (Android) / APNs (iOS) credentials below.
 
-## Part B — Apple (iOS) push
+---
 
-Expo/EAS can manage this for you. Either:
-- Let EAS create the APNs key automatically during `eas credentials`, **or**
-- Provide an **APNs Auth Key**: a `.p8` file + its **Key ID** + your **Apple Team
-  ID** (`eas.json` already shows team `UJV5N29U6F`).
+## Firebase project (Android) — DONE
 
-No Firebase is required for iOS — APNs is direct.
+| Item | Value |
+|---|---|
+| Firebase project name | **ETICO** |
+| Project ID | **`etico-492e7`** |
+| Plan | Spark (free — FCM works on Spark) |
+| Android package | **`ng.moneta.capital`** |
+| FCM Sender ID | **`927559305259`** |
+| FCM V1 API | **Enabled** |
+| Owner Google account | `xrenegade1813@gmail.com` |
 
-## Part C — Wire the credentials into EAS (once)
+### Files & where they live
+- **`google-services.json`** → committed location: **repo root** (`./google-services.json`),
+  referenced by `app.json` → `android.googleServicesFile`. It is **gitignored**
+  (see `.gitignore`) — hand it to each builder or store it as an EAS file secret.
+  Package inside it: `ng.moneta.capital`, project `etico-492e7`.
+- **FCM V1 service-account key** (the "Generate new private key" JSON from
+  Firebase → Project settings → Service accounts). This is a **SECRET** — it is
+  **NOT** in the repo. It was downloaded to
+  `C:\Users\ALEX\Downloads\etico-492e7-firebase-adminsdk-fbsvc-00c2b5f8b6.json`
+  and **uploaded to EAS** (below). Store the original somewhere safe (password
+  manager / secret store); if lost, regenerate a new one in Firebase.
 
-From the project root, with `eas-cli` installed and logged in as the Expo owner
-(`emmanuel-entonu`):
+### FCM V1 service-account identifiers (not secrets — for reference)
+- Service account email: `firebase-adminsdk-fbsvc@etico-492e7.iam.gserviceaccount.com`
+- Client ID: `108932155210489273049`
+- Private Key ID: `00c2b5f8b6a98c7b5ffa6da41e3de5d16b9f89dc`
+- (The private key **material** is only in the JSON file + on EAS — never written here.)
 
+### EAS — DONE
+Uploaded via `eas credentials -p android` → **Google Service Account → Manage
+your Google Service Account Key for Push Notifications (FCM V1)**. EAS now reports
+the key assigned to `ng.moneta.capital` for FCM V1. EAS account: **`emmanuel-entonu`**
+(Owner); EAS `projectId` `08384831-fdc8-4bd3-a4e9-67eeb5495735` (in `app.json`).
+
+---
+
+## What's left for Android
+A fresh native build (the config only applies at build time — current store/dev
+builds predate `google-services.json`):
 ```bash
-eas credentials
-# Android → (select build profile) → "FCM V1 service account key" → upload the
-#           JSON from Part A step 5.
-# iOS     → Push Notifications → let EAS create the APNs key, or upload your .p8.
+eas build -p android --profile production     # or: npx expo run:android
 ```
-
-Optionally store `google-services.json` as an EAS **file secret** so cloud builds
-find it without it living in git:
-
-```bash
-eas secret:create --scope project --name GOOGLE_SERVICES_JSON \
-  --type file --value ./google-services.json
-```
-(Then set `"googleServicesFile": "$GOOGLE_SERVICES_JSON"` — or just keep the file
-locally for `expo run:android`.)
-
-## Part D — Build & verify
-
-```bash
-# Local dev build (needs google-services.json at repo root):
-npx expo run:android
-# or a cloud build:
-eas build -p android --profile preview
-```
-
-On a **real device** (push tokens don't mint on Android emulators without Play
-services / on iOS simulators):
-1. Sign in → the app calls `registerPushTokenAsync`; confirm a row appears in
-   `profiles.push_token` (starts with `ExponentPushToken[...]`).
-2. Send a test from your machine:
+Verify on a **real device** (tokens don't mint on emulators):
+1. Sign in → confirm `profiles.push_token` gets an `ExponentPushToken[...]` row.
+2. Test send:
    ```bash
    curl -X POST https://exp.host/--/api/v2/push/send \
      -H "Content-Type: application/json" \
-     -d '{"to":"ExponentPushToken[xxxx]","title":"ETICO","body":"Test push","channelId":"trades"}'
+     -d '{"to":"ExponentPushToken[xxxx]","title":"ETICO","body":"Test","channelId":"trades"}'
    ```
-   It should arrive in the tray. (`channelId:"trades"` matches the Android channel
-   the app creates.)
-
-## Part E — Sending real pushes from the backend
-
-Remote events (order filled while the app is closed, T+3 settlement) are sent by
-the **server**, not the app. In the `moneta-app` proxy (Vercel):
-1. Read the user's `profiles.push_token`.
-2. POST to `https://exp.host/--/api/v2/push/send` with
-   `{ to, title, body, data: { route: "/receipt/<id>" }, channelId: "trades" }`.
-   The app already routes on tap via the `data.route` field.
-3. For volume, batch tokens (Expo accepts arrays) and read the receipts endpoint
-   to prune invalid tokens.
+   (`channelId:"trades"` matches the Android channel the app creates.)
 
 ---
 
-## What I need from you to finish this
+## iOS (APNs) — NOT done yet
+iOS pushes go through **APNs**, given directly to Expo — **Firebase is not used
+for iOS** in this Expo setup (Expo's push service already fronts APNs). Options:
+```bash
+eas credentials -p ios      # → Push Notifications → let EAS create the APNs key
+```
+or provide an **APNs Auth Key**: `.p8` + Key ID + Apple Team ID (`UJV5N29U6F`,
+per `eas.json`). Requires a paid Apple Developer account and a real iPhone.
 
-| # | Item | Why |
-|---|---|---|
-| 1 | `google-services.json` (Firebase Android config for `ng.moneta.capital`) | placed at repo root; unblocks Android token minting |
-| 2 | Confirm the **FCM V1 service-account key** is uploaded to EAS (Part C) | lets Expo deliver to FCM |
-| 3 | iOS: let EAS manage APNs, **or** the `.p8` + Key ID + Team ID | iOS delivery |
-| 4 | Confirm the Expo account/owner (`emmanuel-entonu`) + that I can run `eas credentials` | wiring |
+---
 
-Give me #1 (the `google-services.json`) and I'll drop it in and do a build to
-confirm token registration end-to-end. Items 2–4 are account actions on your side.
+## Sending real pushes from the backend
+Server-side (the `moneta-app` proxy), on an event (order filled while closed,
+T+3 settlement):
+1. Read the user's `profiles.push_token`.
+2. `POST https://exp.host/--/api/v2/push/send` with
+   `{ to, title, body, data: { route: "/receipt/<id>" }, channelId: "trades" }`.
+   The app routes on tap via `data.route`.
+3. Batch tokens (Expo accepts arrays) and read the receipts endpoint to prune
+   invalid tokens.
+No FCM/APNs key is needed to *send* — only the ExpoPushToken. The FCM/APNs
+credentials configured in EAS are what let Expo deliver.
