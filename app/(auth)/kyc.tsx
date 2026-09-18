@@ -161,12 +161,30 @@ export default function KycScreen() {
 
     setSaving(true); setSubmitError(null)
     try {
+      // BVN-derived identity is written ONLY when this run actually captured it
+      // (OTP-verified). Otherwise we omit those columns so a redo that skips BVN
+      // (e.g. fixing only the settlement account) doesn't null out previously
+      // verified data — which the wallet VA depends on.
+      const bvnFields = bvnProfile ? {
+        first_name:      bvnProfile.firstName || null,
+        middle_name:     bvnProfile.middleName || null,
+        surname:         bvnProfile.surname || null,
+        gender:          bvnProfile.gender || null,
+        marital_status:  bvnProfile.maritalStatus || null,
+        nationality:     bvnProfile.nationality || null,
+        state_of_origin: bvnProfile.stateOfOrigin || null,
+        lga_of_origin:   bvnProfile.lgaOfOrigin || null,
+        title:           bvnProfile.title || null,
+      } : {}
+      // NIN can come from the BVN record OR the ID fields; only write it when we
+      // have a value, so a redo without it doesn't wipe an existing NIN.
+      const ninValue = bvnProfile?.nin || (idType === 'National ID (NIN)' ? idNumV.value : '')
+
       const { error: dbError } = await supabase.from('profiles').upsert({
         id: user.id,
         full_name: name.value,
         date_of_birth: dobV.value,
         address: addrV.value,
-        bvn: bvnV.value || null,
         phone: phoneV.value,
         id_type: idType,
         id_number: idNumV.value,
@@ -175,17 +193,10 @@ export default function KycScreen() {
         settlement_account_name:   acctName,
         settlement_account_number: acctNo,
         settlement_bank_name:      bank,
-        // Full BVN record (when OTP-verified) — used by the wallet VA + records.
-        first_name:     bvnProfile?.firstName || null,
-        middle_name:    bvnProfile?.middleName || null,
-        surname:        bvnProfile?.surname || null,
-        nin:            bvnProfile?.nin || (idType === 'National ID (NIN)' ? idNumV.value : null),
-        gender:         bvnProfile?.gender || null,
-        marital_status: bvnProfile?.maritalStatus || null,
-        nationality:    bvnProfile?.nationality || null,
-        state_of_origin: bvnProfile?.stateOfOrigin || null,
-        lga_of_origin:  bvnProfile?.lgaOfOrigin || null,
-        title:          bvnProfile?.title || null,
+        // Only overwrite BVN / NIN when actually provided this run.
+        ...(bvnV.value ? { bvn: bvnV.value } : {}),
+        ...(ninValue ? { nin: ninValue } : {}),
+        ...bvnFields,
       })
       if (dbError) throw new Error(dbError.message)
 

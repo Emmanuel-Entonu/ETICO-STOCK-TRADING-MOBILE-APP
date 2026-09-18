@@ -82,6 +82,9 @@ export async function confirmBvnOtp(reference: string, otp: string): Promise<Bvn
   const middleName = str(d.middle_name ?? d.middleName)
   const surname    = str(d.surname     ?? d.last_name ?? d.lastName)
   const rawDob     = str(d.DateOfBirth ?? d.date_of_birth ?? d.dob)
+  // NIBSS BVN records do NOT include a residential address. Only use a genuine
+  // address field if the provider ever returns one; never fall back to state of
+  // origin, or "Plateau State" (the state of origin) wrongly shows as the address.
   const street     = str(d.address ?? d.residential_address ?? d.residentialAddress ?? d.home_address)
   const city       = str(d.city)
   const state      = str(d.state_of_origin ?? d.stateOfOrigin)
@@ -95,7 +98,9 @@ export async function confirmBvnOtp(reference: string, otp: string): Promise<Bvn
     // NIBSS returns the phone as `Phone_number1` (with `Phone_number2` as a
     // secondary); older mocks used phoneNumber/phone. Check them all.
     phone:         str(d.Phone_number1 ?? d.phone_number1 ?? d.phoneNumber ?? d.phone ?? d.phone_number ?? d.Phone_number2),
-    address:       [street, city, state].filter(Boolean).join(', '),
+    // Only a real street/city address, never the state of origin. Empty here
+    // means the KYC screen leaves the address blank for the user to fill in.
+    address:       [street, city].filter(Boolean).join(', '),
     nin:           str(d.nin),
     maritalStatus: str(d.marital_status ?? d.maritalStatus),
     nationality:   str(d.nationality),
