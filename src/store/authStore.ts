@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import {
   validateEmail, validatePassword, validateFullName, validateNairaAmount,
+  validateNigerianPhone,
 } from '@/lib/validation'
 import { usePinStore } from '@/store/pinStore'
 import { createVirtualAccount } from '@/lib/monetaApi'
@@ -32,7 +33,7 @@ interface AuthState {
 
   setSession: (session: Session | null) => void
   signIn: (email: string, password: string) => Promise<string | null>
-  signUp: (email: string, password: string, fullName: string) => Promise<string | null>
+  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<string | null>
   signOut: () => Promise<void>
   loadProfile: () => Promise<void>
   creditWallet: (amountNaira: number) => Promise<void>
@@ -85,17 +86,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return error?.message ?? null
   },
 
-  signUp: async (email, password, fullName) => {
+  signUp: async (email, password, fullName, phone) => {
     const em = validateEmail(email)
     if (!em.ok) return em.error
     const pw = validatePassword(password)
     if (!pw.ok) return pw.error
     const name = validateFullName(fullName)
     if (!name.ok) return name.error
+    // Phone is optional at sign-up but validated when present. Stored in
+    // user_metadata so the KYC screen can prefill it (esp. when the user skips
+    // BVN verification and we have no NIBSS record to pull it from).
+    let phoneValue: string | undefined
+    if (phone && phone.trim()) {
+      const ph = validateNigerianPhone(phone)
+      if (!ph.ok) return ph.error
+      phoneValue = ph.value
+    }
     const { error } = await supabase.auth.signUp({
       email: em.value,
       password: pw.value,
-      options: { data: { full_name: name.value } },
+      options: { data: { full_name: name.value, ...(phoneValue ? { phone: phoneValue } : {}) } },
     })
     return error?.message ?? null
   },

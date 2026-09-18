@@ -6,6 +6,16 @@ import { colors, radii, spacing } from '@/theme'
 import { naira } from '@/lib/format'
 import { StockLogo } from './StockLogo'
 
+// Short, human date for an order row, e.g. "12 Sep 2026, 10:42". Empty on a
+// missing/invalid timestamp so the row just omits the line.
+function fmtOrderDate(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ', ' + d.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 // Shared order line — home (recent 3) and the full history page both use it,
 // so orders read the same everywhere. Tapping opens the receipt, not the
 // trade screen.
@@ -23,6 +33,7 @@ export const OrderRow = memo(function OrderRow({ order, cancelling, onCancel, on
   const statusColor = filled ? colors.positive : cancelled ? colors.textSubtle : colors.warning
   const statusBg    = filled ? colors.positiveSubtle : cancelled ? colors.bgSubtle : colors.warningSubtle
   const buy = order.side === 'BUY'
+  const dateLabel = fmtOrderDate(order.createdAt)
 
   return (
     <Pressable
@@ -44,6 +55,9 @@ export const OrderRow = memo(function OrderRow({ order, cancelling, onCancel, on
           <Text variant="small" tone="muted" numberOfLines={1} style={{ marginTop: 2 }}>
             {order.requestedQty} units · #{order.orderNo}
           </Text>
+          {dateLabel ? (
+            <Text variant="small" tone="subtle" numberOfLines={1} style={{ marginTop: 1 }}>{dateLabel}</Text>
+          ) : null}
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text variant="bodyStrong">{naira(order.totalValue)}</Text>

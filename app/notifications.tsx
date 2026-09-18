@@ -29,7 +29,7 @@ export default function NotificationsScreen() {
   const router = useRouter()
   const { pacOrders, loadOrders } = usePortfolioStore()
   const { pacAccountId, kycStatus, cacsStatus } = useAuthStore()
-  const { items, sync, markRead, markAllRead } = useNotificationStore()
+  const { items, sync, markRead, markAllRead, remove } = useNotificationStore()
 
   useEffect(() => {
     if (pacAccountId) loadOrders(pacAccountId).catch(() => {})
@@ -96,6 +96,13 @@ export default function NotificationsScreen() {
                   <Text variant="small" tone="muted" style={{ marginTop: 2 }}>{n.body}</Text>
                   {timeAgo(n.createdAt) ? <Text variant="small" tone="subtle" style={{ marginTop: 4 }}>{timeAgo(n.createdAt)}</Text> : null}
                 </View>
+                <Pressable
+                  onPress={() => remove(n.id)}
+                  hitSlop={10}
+                  style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Icon name="solar:close-circle-bold" size={18} color={colors.textSubtle} />
+                </Pressable>
               </Pressable>
             ))}
           </View>

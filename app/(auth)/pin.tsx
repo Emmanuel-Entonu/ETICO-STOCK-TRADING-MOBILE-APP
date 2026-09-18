@@ -269,12 +269,17 @@ function Dot({ filled, errored }: { filled: boolean; errored: boolean }) {
     }
   }, [filled, scale])
 
+  // Resolve palette colours on the JS thread. `colors` is a Proxy (theme
+  // system), and cloning a Proxy into a Reanimated worklet crashes on iOS/JSI —
+  // a new worklet is created every time a dot fills, which is why the pad
+  // crashed mid-PIN-entry. The worklet below now captures plain strings only.
+  const fillColor = filled ? (errored ? colors.negative : colors.text) : 'transparent'
+  const strokeColor = errored ? colors.negative : colors.text
+
   const style = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-    backgroundColor: filled
-      ? (errored ? colors.negative : colors.text)
-      : 'transparent',
-    borderColor: errored ? colors.negative : colors.text,
+    backgroundColor: fillColor,
+    borderColor: strokeColor,
   }))
 
   return <Animated.View style={[dotStyles.shell, style]} />

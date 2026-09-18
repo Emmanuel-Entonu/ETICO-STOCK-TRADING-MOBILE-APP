@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { View, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { Link, useRouter } from 'expo-router'
+import { Link, useLocalSearchParams } from 'expo-router'
 import { MotiView } from 'moti'
-import * as WebBrowser from 'expo-web-browser'
-import * as Linking from 'expo-linking'
 import { useAuthStore } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
 import { validateEmail } from '@/lib/validation'
@@ -13,73 +11,59 @@ import { Text, Button, Row, Icon, toast } from '@/ui'
 import { colors, spacing, shadow } from '@/theme'
 import { EticoLogo } from '@/components/EticoMark'
 import { CurvedHero } from '@/components/CurvedHero'
-
-// Dismisses the in-app browser tab once the OAuth redirect completes.
-WebBrowser.maybeCompleteAuthSession()
-
-type OAuthProvider = 'google' | 'apple' | 'facebook'
+import { SocialAuthRow } from '@/components/SocialAuthRow'
 
 export default function LoginScreen() {
-  const router = useRouter()
   const insets = useSafeAreaInsets()
   const signIn = useAuthStore((s) => s.signIn)
+  // Set by the email-confirmation redirect (Supabase → <scheme>://login?confirmed=1)
+  // so a freshly-activated user lands here with a clear success banner (#11).
+  const { confirmed } = useLocalSearchParams<{ confirmed?: string }>()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null)
+  // Set when sign-in fails specifically because the email isn't confirmed —
+  // drives the friendlier message + "resend activation link" action (#10).
+  const [needsConfirm, setNeedsConfirm] = useState(false)
+  const [resending, setResending] = useState(false)
 
   async function submit() {
     const em = validateEmail(email)
     if (!em.ok) { setError(em.error); return }
     if (!password) { setError('Enter your password'); return }
-    setLoading(true); setError(null)
+    setLoading(true); setError(null); setNeedsConfirm(false)
     const err = await signIn(em.value, password)
-    if (err) { setLoading(false); setError(err); return }
+    if (err) {
+      setLoading(false)
+      // Supabase returns "Email not confirmed" for an unactivated account.
+      if (/email not confirmed/i.test(err)) {
+        setNeedsConfirm(true)
+        setError('Your email isn’t confirmed yet. Check your inbox for the activation link, or resend it below.')
+      } else {
+        setError(err)
+      }
+      return
+    }
     // Success: do NOT navigate here. Let AuthGate route (PIN / KYC / app) off
     // the auth-state change while the TransitionSplash covers the gap. A manual
     // router.replace('/(app)') raced AuthGate and briefly flashed Home. Keep the
     // button in its loading state — the auth group unmounts under us.
   }
 
-  // Supabase OAuth via an in-app browser tab. Requires the provider to be
-  // enabled in the Supabase dashboard, and `niqra://login-callback` added to
-  // the project's allowed Redirect URLs. Handles both PKCE (?code=) and
-  // implicit (#access_token=) responses.
-  async function oauth(provider: OAuthProvider) {
-    if (oauthBusy) return
-    setOauthBusy(provider)
+  async function resendActivation() {
+    const em = validateEmail(email)
+    if (!em.ok) { setError(em.error); return }
+    setResending(true)
     try {
-      const redirectTo = Linking.createURL('login-callback')
-      const { data, error: oErr } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo, skipBrowserRedirect: true },
-      })
-      if (oErr || !data?.url) throw oErr ?? new Error('Could not start sign-in')
-
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
-      if (result.type !== 'success' || !result.url) return // cancelled / dismissed
-
-      const parsed = Linking.parse(result.url)
-      const code = parsed.queryParams?.code as string | undefined
-      if (code) {
-        const { error: exErr } = await supabase.auth.exchangeCodeForSession(code)
-        if (exErr) throw exErr
-      } else {
-        const fragment = result.url.includes('#') ? result.url.split('#')[1] : ''
-        const params = new URLSearchParams(fragment)
-        const access_token = params.get('access_token')
-        const refresh_token = params.get('refresh_token')
-        if (!access_token || !refresh_token) throw new Error('No session returned from provider')
-        const { error: sErr } = await supabase.auth.setSession({ access_token, refresh_token })
-        if (sErr) throw sErr
-      }
-      router.replace('/(app)')
+      const { error: rErr } = await supabase.auth.resend({ type: 'signup', email: em.value })
+      if (rErr) throw rErr
+      toast.success('Link sent', `We sent a fresh activation link to ${em.value}.`)
     } catch (e) {
-      toast.error('Sign-in failed', (e as Error).message)
+      toast.error('Could not resend', (e as Error).message)
     } finally {
-      setOauthBusy(null)
+      setResending(false)
     }
   }
 
@@ -106,6 +90,18 @@ export default function LoginScreen() {
             transition={{ type: 'timing', duration: 360 }}
             style={{ paddingHorizontal: spacing['2xl'], paddingTop: spacing.lg }}
           >
+            {confirmed ? (
+              <Row gap="md" align="center" style={{
+                marginBottom: spacing.lg, padding: spacing.md, borderRadius: 14,
+                backgroundColor: colors.positiveSubtle,
+              }}>
+                <Icon name="solar:verified-check-bold" size={20} color={colors.positive} />
+                <Text variant="small" style={{ flex: 1, color: colors.text }}>
+                  Email confirmed — sign in to continue.
+                </Text>
+              </Row>
+            ) : null}
+
             <IconInput
               label="EMAIL"
               icon="solar:letter-linear"
@@ -144,18 +140,18 @@ export default function LoginScreen() {
 
             <Button title="Sign In" onPress={submit} loading={loading} />
 
-            {/* or continue with */}
-            <Row align="center" gap="md" style={{ marginTop: spacing.xl, marginBottom: spacing.lg }}>
-              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-              <Text variant="small" tone="subtle">or continue with</Text>
-              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-            </Row>
+            {/* Resend activation — only when sign-in failed on an unconfirmed email. */}
+            {needsConfirm && (
+              <Button
+                title={resending ? 'Sending…' : 'Resend activation link'}
+                variant="secondary"
+                loading={resending}
+                onPress={resendActivation}
+                style={{ marginTop: spacing.md }}
+              />
+            )}
 
-            <Row gap="md">
-              <SocialButton provider="google" icon="logos:google-icon" onPress={oauth} busy={oauthBusy} />
-              <SocialButton provider="apple" icon="mdi:apple" tint={colors.text} onPress={oauth} busy={oauthBusy} />
-              <SocialButton provider="facebook" icon="logos:facebook" onPress={oauth} busy={oauthBusy} />
-            </Row>
+            <SocialAuthRow />
           </MotiView>
         </ScrollView>
 
@@ -201,33 +197,5 @@ function IconInput({ label, icon, trailing, error, ...props }: any) {
       </View>
       {error ? <Text variant="small" tone="negative" style={{ marginTop: spacing.xs }}>{error}</Text> : null}
     </View>
-  )
-}
-
-function SocialButton({ provider, icon, tint, onPress, busy }: {
-  provider: OAuthProvider
-  icon: string
-  tint?: string
-  onPress: (p: OAuthProvider) => void
-  busy: OAuthProvider | null
-}) {
-  const isBusy = busy === provider
-  const disabled = busy !== null
-  return (
-    <Pressable
-      onPress={() => onPress(provider)}
-      disabled={disabled}
-      style={({ pressed }) => ({
-        flex: 1, height: 56, borderRadius: 16,
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: pressed ? colors.bgMuted : colors.surfaceRaised,
-        borderWidth: 1.5, borderColor: colors.border,
-        opacity: disabled && !isBusy ? 0.5 : 1,
-      })}
-    >
-      {isBusy
-        ? <MotiView from={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ loop: true, type: 'timing', duration: 600 }} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: colors.bgSubtle }} />
-        : <Icon name={icon} size={24} color={tint ?? colors.text} />}
-    </Pressable>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView,
+  View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView, Modal,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -15,6 +15,8 @@ import {
 } from '@/lib/validation'
 import { Text, Button, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
+import { NG_BANKS } from '@/lib/banks'
+import { resolveAccountName } from '@/lib/bankApi'
 
 type Step = 1 | 2 | 3
 
@@ -29,6 +31,19 @@ const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
   2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
   3: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we create your account.' },
+}
+
+// Auto-insert the dashes in a YYYY-MM-DD date as the user types digits (#15),
+// so they never have to type the separators or fight autocorrect.
+function formatDobInput(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 8) // YYYYMMDD
+  const y = d.slice(0, 4)
+  const m = d.slice(4, 6)
+  const day = d.slice(6, 8)
+  let out = y
+  if (d.length > 4) out += '-' + m
+  if (d.length > 6) out += '-' + day
+  return out
 }
 
 export default function KycScreen() {
@@ -65,12 +80,60 @@ export default function KycScreen() {
   // "BANK ACCOUNT DETAILS": where sale proceeds / withdrawals are paid out. It
   // is NOT the Moneta funding wallet. Reviewed by PAC on the partner dashboard.
   const [bankName, setBankName] = useState('')
+  const [bankCode, setBankCode] = useState('')   // 3-digit CBN code for the selected bank
   const [accountNumber, setAccountNumber] = useState('')
   const [accountName, setAccountName] = useState('')
+  // Account name-enquiry (#18): 'idle' | 'resolving' | 'resolved' | 'manual'.
+  // 'resolved' = server confirmed the name (field locks read-only); 'manual' =
+  // enquiry unavailable/failed, so the user types the name themselves.
+  const [nameStatus, setNameStatus] = useState<'idle' | 'resolving' | 'resolved' | 'manual'>('idle')
 
   // Step 3
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Per-field validation errors so skipping BVN (or any invalid personal /
+  // settlement field) shows exactly what's wrong instead of a silently
+  // disabled Continue button (#16).
+  const [fieldErr, setFieldErr] = useState<Record<string, string>>({})
+  const clearErr = (k: string) => setFieldErr(prev => { if (!prev[k]) return prev; const { [k]: _, ...rest } = prev; return rest })
+  const [bankPickerOpen, setBankPickerOpen] = useState(false)
+
+  // Prefill name + phone captured at registration so a user who skips BVN
+  // verification doesn't retype them (#13). Only fills empties, so a NIBSS
+  // pull or the user's own edits always win.
+  useEffect(() => {
+    const meta = (user?.user_metadata ?? {}) as { full_name?: string; phone?: string }
+    if (meta.full_name) setFullName(prev => prev || meta.full_name!)
+    if (meta.phone) setPhone(prev => prev || meta.phone!)
+  }, [user])
+
+  // Name-enquiry (#18): once a bank is picked and the NUBAN is 10 digits, resolve
+  // the account holder's name via the NIBSS debit-instruction enquiry and lock
+  // the field. That service REQUIRES the BVN (it also confirms the account is
+  // tied to that BVN), so we only attempt it when we have an 11-digit BVN —
+  // a user who skipped BVN just types the name manually. Any failure (route not
+  // deployed yet, unverifiable MFB, mismatch) falls back to manual entry so KYC
+  // never blocks.
+  useEffect(() => {
+    if (accountNumber.length !== 10 || !bankCode) { setNameStatus('idle'); return }
+    const bank = NG_BANKS.find(b => b.bankCode === bankCode)
+    // Only auto-resolve when we hold a genuinely VERIFIED BVN (OTP-confirmed in
+    // step 1). The enquiry is a BVN⇄account match, so a typed-but-unverified or
+    // skipped BVN would just produce a confusing "not verified" — those users
+    // type the account name manually instead.
+    if (!bank || !bvnDone || !/^\d{11}$/.test(bvn)) { setNameStatus('manual'); return }
+    let cancelled = false
+    setNameStatus('resolving')
+    resolveAccountName({ accountNumber, institutionCode: bank.institutionCode, bvn })
+      .then(r => {
+        if (cancelled) return
+        if (r.verified && r.name) { setAccountName(r.name); setNameStatus('resolved'); clearErr('accountName') }
+        else setNameStatus('manual')
+      })
+      .catch(() => { if (cancelled) return; setNameStatus('manual') })
+    return () => { cancelled = true }
+  }, [accountNumber, bankCode, bvn, bvnDone])
 
   useEffect(() => {
     if (!bvnRef) { setOtpWaitSec(0); return }
@@ -126,17 +189,29 @@ export default function KycScreen() {
     setBvnDone(false); setBvnRef(null); setOtp(''); setBvnError(null)
   }
 
-  const canStep1 =
-    (bvnDone || bvnSkipped)
-    && validateFullName(fullName).ok
-    && validateDob(dob).ok
-    && validateAddress(address).ok
-    && validateNigerianPhone(phone).ok
-  const settlementOk =
-    bankName.trim().length >= 2
-    && /^\d{10}$/.test(accountNumber)
-    && accountName.trim().length >= 2
-  const canStep2 = !!idType && validateIdNumber(idNumber).ok && settlementOk
+  // Validate step 1 and surface a per-field error for anything invalid, so a
+  // user who skipped BVN sees why Continue won't advance (#16). Returns true
+  // when the step is complete.
+  function validateStep1(): boolean {
+    const errs: Record<string, string> = {}
+    if (!bvnDone && !bvnSkipped) errs.bvn = 'Verify your BVN or choose to continue without it'
+    const name = validateFullName(fullName); if (!name.ok) errs.fullName = name.error
+    const dobV = validateDob(dob);           if (!dobV.ok) errs.dob = dobV.error
+    const addrV = validateAddress(address);  if (!addrV.ok) errs.address = addrV.error
+    const phV = validateNigerianPhone(phone);if (!phV.ok) errs.phone = phV.error
+    setFieldErr(errs)
+    return Object.keys(errs).length === 0
+  }
+
+  function validateStep2(): boolean {
+    const errs: Record<string, string> = {}
+    const idV = validateIdNumber(idNumber); if (!idV.ok) errs.idNumber = idV.error
+    if (bankName.trim().length < 2) errs.bankName = 'Select your settlement bank'
+    if (!/^\d{10}$/.test(accountNumber)) errs.accountNumber = 'Account number must be 10 digits'
+    if (accountName.trim().length < 2) errs.accountName = 'Enter the name on the account'
+    setFieldErr(errs)
+    return Object.keys(errs).length === 0
+  }
 
   async function submit() {
     if (!user) return
@@ -239,9 +314,11 @@ export default function KycScreen() {
 
   const goBackStep = () => setStep(s => (s > 1 ? ((s - 1) as Step) : s))
 
+  // CTA is always pressable so validation can run and show errors (#16),
+  // rather than a silently-disabled button with no feedback.
   const cta =
-    step === 1 ? { label: 'Continue', disabled: !canStep1, loading: false, onPress: () => setStep(2) }
-    : step === 2 ? { label: 'Continue', disabled: !canStep2, loading: false, onPress: () => setStep(3) }
+    step === 1 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep1()) setStep(2) } }
+    : step === 2 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep2()) setStep(3) } }
     : { label: saving ? 'Submitting…' : 'Submit KYC', disabled: saving, loading: saving, onPress: submit }
 
   const meta = STEP_META[step]
@@ -307,7 +384,7 @@ export default function KycScreen() {
                   editable={!bvnDone && !bvnSkipped}
                   maxLength={11}
                   big
-                  error={bvnError && !bvnRef ? bvnError : null}
+                  error={bvnError && !bvnRef ? bvnError : (fieldErr.bvn ?? null)}
                   trailing={
                     bvnDone ? (
                       <Icon name="solar:check-circle-bold" size={22} color={colors.positive} />
@@ -354,10 +431,15 @@ export default function KycScreen() {
                   </MotiView>
                 )}
 
-                {/* Offer skip before OTP is sent too */}
-                {bvn.length === 11 && !bvnDone && !bvnSkipped && !bvnRef && (
-                  <Pressable onPress={() => setBvnSkipped(true)} hitSlop={8} style={{ marginTop: -spacing.md, marginBottom: spacing['2xl'] }}>
-                    <Text variant="smallStrong" tone="muted">Continue without OTP verification</Text>
+                {/* Prominent "continue without verification" — available BEFORE
+                    the BVN is entered so users aren't forced through OTP (#12). */}
+                {!bvnDone && !bvnSkipped && !bvnRef && (
+                  <Pressable
+                    onPress={() => { setBvnSkipped(true); clearErr('bvn') }}
+                    style={({ pressed }) => [styles.skipBtn(), pressed && { opacity: 0.7 }]}
+                  >
+                    <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textMuted} />
+                    <Text variant="smallStrong" tone="muted">Continue without verification</Text>
                   </Pressable>
                 )}
 
@@ -365,10 +447,10 @@ export default function KycScreen() {
                 {(bvnDone || bvnSkipped) && (
                   <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 320 }}>
                     <Divider label="Your details" />
-                    <UField label="Full name" value={fullName} onChangeText={setFullName} placeholder="Your full name" autoCapitalize="words" />
-                    <UField label="Date of birth" value={dob} onChangeText={setDob} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
-                    <UField label="Residential address" value={address} onChangeText={setAddress} placeholder="Where you live" autoCapitalize="words" />
-                    <UField label="Phone number" value={phone} onChangeText={setPhone} placeholder="e.g. 08012345678" keyboardType="phone-pad" autoComplete="tel" />
+                    <UField label="Full name" value={fullName} onChangeText={(v: string) => { setFullName(v); clearErr('fullName') }} placeholder="Your full name" autoCapitalize="words" error={fieldErr.fullName} />
+                    <UField label="Date of birth" value={dob} onChangeText={(v: string) => { setDob(formatDobInput(v)); clearErr('dob') }} placeholder="YYYY-MM-DD" keyboardType="number-pad" maxLength={10} error={fieldErr.dob} />
+                    <UField label="Residential address" value={address} onChangeText={(v: string) => { setAddress(v); clearErr('address') }} placeholder="Where you live" autoCapitalize="words" error={fieldErr.address} />
+                    <UField label="Phone number" value={phone} onChangeText={(v: string) => { setPhone(v); clearErr('phone') }} placeholder="e.g. 08012345678" keyboardType="phone-pad" autoComplete="tel" error={fieldErr.phone} />
                   </MotiView>
                 )}
               </View>
@@ -397,7 +479,7 @@ export default function KycScreen() {
                 </View>
 
                 <View style={{ height: spacing['2xl'] }} />
-                <UField label="ID number" value={idNumber} onChangeText={setIdNumber} placeholder="Enter your ID number" autoCapitalize="characters" big />
+                <UField label="ID number" value={idNumber} onChangeText={(v: string) => { setIdNumber(v); clearErr('idNumber') }} placeholder="Enter your ID number" autoCapitalize="characters" big error={fieldErr.idNumber} />
 
                 <Divider label="Settlement bank account" />
                 <View style={styles.uploadNote()}>
@@ -407,28 +489,61 @@ export default function KycScreen() {
                   </Text>
                 </View>
                 <View style={{ height: spacing.xl }} />
-                <UField
-                  label="Bank name"
-                  value={bankName}
-                  onChangeText={setBankName}
-                  placeholder="e.g. Guaranty Trust Bank"
-                  autoCapitalize="words"
-                />
+
+                {/* Bank picker (#18) — dropdown instead of free text. */}
+                <View style={{ marginBottom: spacing['2xl'] }}>
+                  <Text variant="eyebrow" tone="muted" style={{ marginBottom: spacing.md }}>BANK NAME</Text>
+                  <Pressable
+                    onPress={() => setBankPickerOpen(true)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      borderBottomWidth: 2, borderBottomColor: fieldErr.bankName ? colors.negative : colors.borderStrong,
+                      paddingBottom: spacing.sm,
+                    }}
+                  >
+                    <Text variant="body" style={{ fontSize: 18, fontWeight: '600', color: bankName ? colors.text : colors.textSubtle }}>
+                      {bankName || 'Select your bank'}
+                    </Text>
+                    <Icon name="solar:alt-arrow-down-linear" size={20} color={colors.textMuted} />
+                  </Pressable>
+                  {fieldErr.bankName ? <Text variant="small" tone="negative" style={{ marginTop: spacing.sm }}>{fieldErr.bankName}</Text> : null}
+                </View>
+
                 <UField
                   label="Account number"
                   value={accountNumber}
-                  onChangeText={(v: string) => setAccountNumber(v.replace(/\D/g, '').slice(0, 10))}
+                  onChangeText={(v: string) => {
+                    setAccountNumber(v.replace(/\D/g, '').slice(0, 10))
+                    clearErr('accountNumber')
+                    // Any edit invalidates a previously-resolved name.
+                    if (nameStatus === 'resolved') { setAccountName(''); setNameStatus('idle') }
+                  }}
                   placeholder="10 digits"
                   keyboardType="number-pad"
                   maxLength={10}
+                  error={fieldErr.accountNumber}
                 />
-                <UField
-                  label="Account name"
-                  value={accountName}
-                  onChangeText={setAccountName}
-                  placeholder="Name on the account"
-                  autoCapitalize="words"
-                />
+
+                {nameStatus === 'resolving' ? (
+                  <Text variant="small" tone="muted" style={{ marginTop: -spacing.md, marginBottom: spacing['2xl'] }}>Verifying account…</Text>
+                ) : nameStatus === 'resolved' ? (
+                  <View style={{ marginBottom: spacing['2xl'] }}>
+                    <Text variant="eyebrow" tone="muted" style={{ marginBottom: spacing.sm }}>ACCOUNT NAME</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <Icon name="solar:verified-check-bold" size={18} color={colors.positive} />
+                      <Text variant="bodyStrong" style={{ flex: 1 }}>{accountName}</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <UField
+                    label="Account name"
+                    value={accountName}
+                    onChangeText={(v: string) => { setAccountName(v); clearErr('accountName') }}
+                    placeholder="Name on the account"
+                    autoCapitalize="words"
+                    error={fieldErr.accountName}
+                  />
+                )}
               </View>
             )}
 
@@ -460,7 +575,6 @@ export default function KycScreen() {
                   {bvnProfile?.lgaOfOrigin ?   <ReviewRow label="LGA of origin" value={bvnProfile.lgaOfOrigin} /> : null}
                   <ReviewRow label="BVN" value={bvn ? `••••••${bvn.slice(-3)}` : 'Not provided'} />
                   <ReviewRow label="ID type" value={idType} />
-                  <ReviewRow label="ID number" value={idNumber} />
                   <ReviewRow label="Settlement bank" value={bankName} />
                   <ReviewRow label="Account number" value={accountNumber} />
                   <ReviewRow label="Account name" value={accountName} last />
@@ -484,6 +598,42 @@ export default function KycScreen() {
           <Button title={cta.label} onPress={cta.onPress} disabled={cta.disabled} loading={cta.loading} />
         </View>
       </KeyboardAvoidingView>
+
+      {/* Bank picker (#18) */}
+      <Modal visible={bankPickerOpen} transparent animationType="slide" onRequestClose={() => setBankPickerOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }} onPress={() => setBankPickerOpen(false)}>
+          <Pressable
+            onPress={() => {}}
+            style={{
+              maxHeight: '72%', backgroundColor: colors.surfaceRaised,
+              borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl,
+              paddingTop: spacing.lg, paddingBottom: Math.max(insets.bottom, spacing.xl),
+            }}
+          >
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: spacing.lg }} />
+            <Text variant="h3" style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.md }}>Select your bank</Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {NG_BANKS.map((b, i) => {
+                const selected = b.name === bankName
+                return (
+                  <Pressable
+                    key={b.bankCode}
+                    onPress={() => { setBankName(b.name); setBankCode(b.bankCode); setAccountName(''); setNameStatus('idle'); clearErr('bankName'); setBankPickerOpen(false) }}
+                    style={({ pressed }) => [
+                      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.lg, paddingHorizontal: spacing.xl },
+                      i < NG_BANKS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                      pressed && { backgroundColor: colors.bgMuted },
+                    ]}
+                  >
+                    <Text variant="body" style={{ color: selected ? colors.accent : colors.text }}>{b.name}</Text>
+                    {selected && <Icon name="solar:check-circle-bold" size={20} color={colors.accent} />}
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -585,6 +735,12 @@ const styles = {
     width: 40, height: 40, borderRadius: radii.pill,
     alignItems: 'center' as const, justifyContent: 'center' as const,
     backgroundColor: colors.bgSubtle,
+  }),
+  skipBtn: () => ({
+    flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
+    gap: spacing.sm, marginTop: -spacing.md, marginBottom: spacing['2xl'],
+    paddingVertical: spacing.md, borderRadius: radii.md,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSubtle,
   }),
   listCard: () => ({
     borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg,

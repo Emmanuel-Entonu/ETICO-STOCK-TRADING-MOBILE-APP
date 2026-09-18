@@ -5,11 +5,14 @@ import { StatusBar } from 'expo-status-bar'
 import { Link, useRouter } from 'expo-router'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
-import { validateEmail, validatePassword, validateFullName } from '@/lib/validation'
+import { validateEmail, validatePassword, validateFullName, validateNigerianPhone } from '@/lib/validation'
 import { Text, Button, Row, Icon } from '@/ui'
 import { colors, spacing, shadow } from '@/theme'
 import { EticoMark } from '@/components/EticoMark'
 import { CurvedHero } from '@/components/CurvedHero'
+import { SocialAuthRow } from '@/components/SocialAuthRow'
+
+type FieldErrors = Partial<Record<'name' | 'email' | 'phone' | 'password' | 'confirm', string>>
 
 const HERO_TEXT = '#FDFCFA'
 const HERO_SUB = 'rgba(253,252,250,0.72)'
@@ -20,23 +23,45 @@ export default function RegisterScreen() {
   const signUp = useAuthStore((s) => s.signUp)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [showPw, setShowPw] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<FieldErrors>({})
+  const [formError, setFormError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
+  // Clear a single field's error (and any form-level error) as the user edits.
+  const clearField = (f: keyof FieldErrors) => {
+    if (formError) setFormError(null)
+    setErrors(prev => { if (!prev[f]) return prev; const { [f]: _, ...rest } = prev; return rest })
+  }
+
   async function submit() {
+    // Validate every field up-front and attach each error to ITS OWN input,
+    // instead of surfacing a single message under the password box (#5).
     const name = validateFullName(fullName)
-    if (!name.ok) { setError(name.error); return }
-    const em = validateEmail(email)
-    if (!em.ok) { setError(em.error); return }
-    const pw = validatePassword(password)
-    if (!pw.ok) { setError(pw.error); return }
-    setLoading(true); setError(null)
-    const err = await signUp(em.value, pw.value, name.value)
+    const em   = validateEmail(email)
+    const ph   = validateNigerianPhone(phone)
+    const pw   = validatePassword(password)
+    const next: FieldErrors = {}
+    if (!name.ok) next.name = name.error
+    if (!em.ok)   next.email = em.error
+    if (!ph.ok)   next.phone = ph.error
+    if (!pw.ok)   next.password = pw.error
+    else if (confirm !== password) next.confirm = 'Passwords do not match'
+    setErrors(next)
+    setFormError(null)
+    if (Object.keys(next).length > 0) return
+    // Redundant guard for the type-narrower — every branch above already
+    // populated `next` on failure, so we never reach here unless all are ok.
+    if (!name.ok || !em.ok || !ph.ok || !pw.ok) return
+
+    setLoading(true)
+    const err = await signUp(em.value, pw.value, name.value, ph.value)
     setLoading(false)
-    if (err) setError(err)
+    if (err) setFormError(err)
     else setSuccess(true)
   }
 
@@ -106,43 +131,75 @@ export default function RegisterScreen() {
               label="FULL NAME"
               icon="solar:user-linear"
               value={fullName}
-              onChangeText={(t: string) => { setFullName(t); if (error) setError(null) }}
+              onChangeText={(t: string) => { setFullName(t); clearField('name') }}
               placeholder="As it appears on your ID"
               autoCapitalize="words"
               autoComplete="name"
+              error={errors.name}
             />
             <IconInput
               label="EMAIL"
               icon="solar:letter-linear"
               value={email}
-              onChangeText={(t: string) => { setEmail(t); if (error) setError(null) }}
+              onChangeText={(t: string) => { setEmail(t); clearField('email') }}
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
               autoCorrect={false}
+              error={errors.email}
+            />
+            <IconInput
+              label="PHONE NUMBER"
+              icon="solar:smartphone-linear"
+              value={phone}
+              onChangeText={(t: string) => { setPhone(t); clearField('phone') }}
+              placeholder="e.g. 08012345678"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              error={errors.phone}
             />
             <IconInput
               label="PASSWORD"
               icon="solar:lock-password-linear"
               value={password}
-              onChangeText={(t: string) => { setPassword(t); if (error) setError(null) }}
-              placeholder="At least 6 characters"
+              onChangeText={(t: string) => { setPassword(t); clearField('password') }}
+              placeholder="At least 8 characters, letters & numbers"
               secureTextEntry={!showPw}
               autoCapitalize="none"
               autoComplete="password-new"
-              error={error}
+              error={errors.password}
               trailing={
                 <Pressable onPress={() => setShowPw((v) => !v)} hitSlop={12}>
                   <Icon name={showPw ? 'solar:eye-closed-linear' : 'solar:eye-linear'} size={20} color={colors.textMuted} />
                 </Pressable>
               }
             />
+            <IconInput
+              label="CONFIRM PASSWORD"
+              icon="solar:lock-password-linear"
+              value={confirm}
+              onChangeText={(t: string) => { setConfirm(t); clearField('confirm') }}
+              placeholder="Re-enter your password"
+              secureTextEntry={!showPw}
+              autoCapitalize="none"
+              autoComplete="password-new"
+              error={errors.confirm}
+            />
+
+            {formError ? (
+              <Text variant="small" tone="negative" style={{ marginBottom: spacing.md }}>{formError}</Text>
+            ) : null}
 
             <Button title="Create Account" onPress={submit} loading={loading} style={{ marginTop: spacing.sm }} />
             <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.md }}>
-              By continuing, you agree to ETICO's Terms and Privacy Policy.
+              By continuing, you agree to ETICO's{' '}
+              <Text variant="smallStrong" tone="brand" onPress={() => router.push('/terms' as never)}>Terms</Text>
+              {' '}and{' '}
+              <Text variant="smallStrong" tone="brand" onPress={() => router.push('/privacy' as never)}>Privacy Policy</Text>.
             </Text>
+
+            <SocialAuthRow label="or sign up with" />
           </MotiView>
         </ScrollView>
 

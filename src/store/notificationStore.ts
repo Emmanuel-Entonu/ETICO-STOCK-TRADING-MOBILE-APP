@@ -24,8 +24,12 @@ interface AccountStatus {
 
 interface NotifState {
   items: Notif[]
+  /** Ids the user has deleted. Persisted so a dismissed (derived) notification
+   *  isn't rebuilt by the next sync. */
+  dismissed: string[]
   markRead: (id: string) => void
   markAllRead: () => void
+  remove: (id: string) => void
   clearAll: () => void
   /** Rebuild derived notifications from orders + account status, preserving
    *  read flags for anything we've already shown. Idempotent. */
@@ -109,10 +113,22 @@ export const useNotificationStore = create<NotifState>()(
   persist(
     (set, get) => ({
       items: [],
+      dismissed: [],
       markRead: (id) => set(s => ({ items: s.items.map(n => n.id === id ? { ...n, read: true } : n) })),
       markAllRead: () => set(s => ({ items: s.items.map(n => ({ ...n, read: true })) })),
-      clearAll: () => set({ items: [] }),
+      // Delete a single notification. Remember the id so a derived item (order/
+      // account/system) isn't recreated on the next sync. Cap the dismissed
+      // list so it can't grow unbounded.
+      remove: (id) => set(s => ({
+        items: s.items.filter(n => n.id !== id),
+        dismissed: s.dismissed.includes(id) ? s.dismissed : [...s.dismissed, id].slice(-200),
+      })),
+      clearAll: () => set(s => ({
+        items: [],
+        dismissed: Array.from(new Set([...s.dismissed, ...s.items.map(n => n.id)])).slice(-200),
+      })),
       sync: (orders, status) => {
+        const dismissed = new Set(get().dismissed)
         const prev = new Map(get().items.map(n => [n.id, n]))
 
         // Detect pending → filled transitions and fire a tray notification for
@@ -138,6 +154,7 @@ export const useNotificationStore = create<NotifState>()(
           byId.set(d.id, existing ? { ...d, read: existing.read } : d)
         }
         const merged = Array.from(byId.values())
+          .filter(n => !dismissed.has(n.id))   // never resurrect a deleted notification
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, 50)
         set({ items: merged })

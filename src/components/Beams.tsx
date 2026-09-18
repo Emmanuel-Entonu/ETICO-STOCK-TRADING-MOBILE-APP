@@ -9,7 +9,7 @@
 //
 // Props are kept identical to the old component so callers don't change.
 
-import { FC, useState } from 'react'
+import { FC, useMemo, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Canvas, Fill, Shader, Skia } from '@shopify/react-native-skia'
 import { useSharedValue, useFrameCallback, useDerivedValue } from 'react-native-reanimated'
@@ -111,16 +111,27 @@ const Beams: FC<BeamsProps> = ({
     time.value = info.timeSinceFirstFrame / 1000
   })
 
+  // Precompute everything on the JS thread. `useDerivedValue` runs its body as a
+  // Reanimated WORKLET on the UI runtime, where calling a plain JS function like
+  // hexToRgb() (or touching any non-shareable value) throws on iOS/JSI — that's
+  // what made the beams silently fall back to the gradient on iOS. The worklet
+  // now only reads plain numbers/arrays + the shared `time`.
+  const uBg = useMemo(() => hexToRgb(backgroundColor), [backgroundColor])
+  const uGreen = useMemo(() => hexToRgb(ambientColor), [ambientColor])
+  const uGold = useMemo(() => hexToRgb(lightColor), [lightColor])
+  const uBeams = Math.max(1, beamNumber / 2)
+  const uRotation = (rotation * Math.PI) / 180
+
   const uniforms = useDerivedValue(() => ({
     iResolution: [size.width || 1, size.height || 1],
     iTime: time.value,
     uSpeed: speed,
-    uBeams: Math.max(1, beamNumber / 2),
-    uRotation: (rotation * Math.PI) / 180,
+    uBeams,
+    uRotation,
     uNoiseIntensity: noiseIntensity,
-    uBg: hexToRgb(backgroundColor),
-    uGreen: hexToRgb(ambientColor),
-    uGold: hexToRgb(lightColor),
+    uBg,
+    uGreen,
+    uGold,
   }))
 
   return (

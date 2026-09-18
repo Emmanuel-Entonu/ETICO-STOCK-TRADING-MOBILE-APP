@@ -81,9 +81,16 @@ export async function notifyTrade(opts: {
  */
 export async function scheduleMarketOpenReminders(): Promise<void> {
   try {
+    // Clear any previously-scheduled market-open reminders first so we never
+    // stack duplicates. Match on BOTH the `kind` tag AND the title — older
+    // builds scheduled these without the tag, so a tag-only sweep left them
+    // behind and the user accumulated several identical "market open" alerts
+    // (the reported "sent ~5 times"). Matching the title reclaims those too.
     const all = await Notifications.getAllScheduledNotificationsAsync()
     for (const n of all) {
-      if ((n.content?.data as { kind?: string } | undefined)?.kind === 'market-open') {
+      const kind = (n.content?.data as { kind?: string } | undefined)?.kind
+      const title = n.content?.title ?? ''
+      if (kind === 'market-open' || title === 'The NGX is open') {
         await Notifications.cancelScheduledNotificationAsync(n.identifier)
       }
     }
