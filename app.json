@@ -6,7 +6,6 @@
     "orientation": "portrait",
     "scheme": "niqra",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "icon": "./assets/brand/etico-icon.png",
     "ios": {
       "supportsTablet": false,
@@ -40,7 +39,14 @@
       "pacProxyUrl": "",
       "mdsProxyUrl": "",
       "nibssProxyUrl": "",
-      "monetaProxyUrl": ""
-    }
+      "monetaProxyUrl": "",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "08384831-fdc8-4bd3-a4e9-67eeb5495735"
+      }
+    },
+    "owner": "emmanuel-entonu"
   }
 }

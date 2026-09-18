@@ -206,7 +206,7 @@ export default function KycScreen() {
       // the reviewer flips it to 'approved' (which unlocks trading) or
       // 'rejected'. A redo re-runs this whole flow → back to 'pending'.
       const { error: updateErr } = await supabase.from('profiles')
-        .update({ pac_account_id: pacAccountId, kyc_status: 'verified', cacs_status: 'pending' })
+        .update({ pac_account_id: pacAccountId, kyc_status: 'verified', cacs_status: 'pending', cacs_rejection_reason: null })
         .eq('id', user.id)
       if (updateErr) throw new Error(updateErr.message)
 

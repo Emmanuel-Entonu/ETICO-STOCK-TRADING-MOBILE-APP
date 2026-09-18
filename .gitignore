@@ -25,3 +25,6 @@ firebase-*.json
 
 # filter-branch temp dir (leftover)
 .git-rewrite/
+
+credentials.json
+credentials/

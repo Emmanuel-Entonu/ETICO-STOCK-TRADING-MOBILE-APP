@@ -1,0 +1,39 @@
+{
+  "cli": {
+    "version": ">= 24.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "autoIncrement": true,
+      "credentialsSource": "local",
+      "ios": {
+        "resourceClass": "m-medium",
+        "image": "latest"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "simulator": {
+      "ios": {
+        "simulator": true,
+        "image": "latest"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6812737516",
+        "appleTeamId": "UJV5N29U6F",
+        "ascApiKeyPath": "/Users/monetatechnology/Downloads/AuthKey_FDJRPZ3HJQ.p8",
+        "ascApiKeyId": "FDJRPZ3HJQ",
+        "ascApiKeyIssuerId": "b4491e9f-6fee-4e9d-b9d2-707d491032ce"
+      }
+    }
+  }
+}
