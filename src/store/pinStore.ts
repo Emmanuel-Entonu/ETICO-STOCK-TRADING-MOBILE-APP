@@ -23,31 +23,36 @@ export const usePinStore = create<PinState>((set, get) => ({
   unlock: () => set({ unlockedThisSession: true, backgroundedAt: null }),
   lock:   () => set({ unlockedThisSession: false, backgroundedAt: null }),
 
-  // Lock immediately on background so the very first frame of the resume
-  // is already the splash — no Home flash. If the user comes back within
-  // BACKGROUND_GRACE_MS, handleForeground re-unlocks silently.
+  // Just record WHEN we left — do NOT lock here. Locking on background flips
+  // `unlockedThisSession` to false, which makes AuthGate immediately
+  // `router.replace('/(auth)/pin')` and tear down the whole navigation stack.
+  // The result was: a split-second minimize dumped the user back on Home and
+  // lost whatever screen (trade sheet, wallet, …) they were on, and left the
+  // trade modal with nothing behind it so the back button closed the app.
+  // The screen is already blocked while backgrounded by FLAG_SECURE + the
+  // native privacy overlay (Android) and the JS PrivacyOverlay, so there's no
+  // need to lock the session until we know how long they were actually away.
   handleBackground: () => {
     const s = get()
-    if (s.unlockedThisSession) {
-      set({ backgroundedAt: Date.now(), unlockedThisSession: false })
+    if (s.unlockedThisSession && s.backgroundedAt == null) {
+      set({ backgroundedAt: Date.now() })
     }
   },
+  // Decide on the way back in. Within the grace window we were never locked,
+  // so the user lands exactly where they left off. Past the grace window we
+  // lock now — AuthGate then routes to the PIN screen for re-entry.
   handleForeground: () => {
     const bg = get().backgroundedAt
-    if (!bg || Date.now() - bg > BACKGROUND_GRACE_MS) {
-      set({ backgroundedAt: null })
+    if (bg == null) return
+
+    if (Date.now() - bg > BACKGROUND_GRACE_MS) {
+      // Away too long → require the PIN again. (If the user was signed out
+      // while away, `unlockedThisSession` is already false — this is a no-op
+      // beyond clearing the timestamp, and the login flow isn't skipped.)
+      set({ unlockedThisSession: false, backgroundedAt: null })
       return
     }
-    // Only silently re-unlock if the same authenticated user is still
-    // logged in. Otherwise (signOut fired while backgrounded, session
-    // expired, or a new user is about to log in) leave locked so the
-    // login/PIN screen isn't skipped.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useAuthStore } = require('@/store/authStore') as typeof import('@/store/authStore')
-    if (useAuthStore.getState().user) {
-      set({ unlockedThisSession: true, backgroundedAt: null })
-    } else {
-      set({ backgroundedAt: null })
-    }
+    // Back within grace → nothing to do; still unlocked, same screen.
+    set({ backgroundedAt: null })
   },
 }))

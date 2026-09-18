@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { View, Pressable, ScrollView, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native'
+import { View, Pressable, ScrollView, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, BackHandler } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -70,6 +70,28 @@ export default function TradeScreen() {
   const [fetchedStock, setFetchedStock] = useState<PacMarketData | null>(null)
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
+
+  // Android hardware/gesture back bypasses the on-screen close button and, when
+  // there's no back-stack (e.g. a cold-start deep link, or an edge case where
+  // this modal ended up as the root), react-navigation would finish the
+  // activity and close the whole app. Intercept it: close whatever overlay is
+  // on top first (deepest first), and only fall through to goBack — which
+  // always resolves to the market/home screen — when the base screen is bare.
+  // A deterministic fallback that also covers overlays whose own onRequestClose
+  // doesn't fire; when a <Modal>'s handler consumes the press first, this
+  // simply never runs.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (pinOpen)        { setPinOpen(false); return true }
+      if (legalOpen)      { setLegalOpen(false); return true }
+      if (confirmOpen)    { setConfirmOpen(false); return true }
+      if (receipt)        { setReceipt(null); setQuantity(''); return true }
+      if (orderSheetOpen) { setOrderSheetOpen(false); return true }
+      goBack()
+      return true
+    })
+    return () => sub.remove()
+  }, [pinOpen, legalOpen, confirmOpen, receipt, orderSheetOpen, goBack])
 
   useEffect(() => { if (marketData.length === 0) loadMarketData() }, [])
   useEffect(() => () => { clearOrderResult() }, [])
@@ -756,7 +778,7 @@ function ReceiptSheet({ receipt, symbol, name, onClose, onViewPortfolio }: {
   if (!receipt) return null
   const isBuy = receipt.side === 'BUY'
   return (
-    <Modal visible transparent animationType="fade">
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: spacing.xl }}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.lg }}>
           <View style={styles.check}>

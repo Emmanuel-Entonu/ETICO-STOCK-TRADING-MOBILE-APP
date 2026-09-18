@@ -1,5 +1,5 @@
 // @@iconify-code-gen
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -108,6 +108,41 @@ function TransitionSplash() {
   )
 }
 
+// Opaque branded cover shown the instant the app stops being `active`
+// (minimized, app-switcher, or a system dialog on top). Blocks the app
+// content from any glance or the task-switcher snapshot on both platforms —
+// a JS complement to Android's FLAG_SECURE + native overlay. This is purely
+// visual: it does NOT lock the session or touch navigation, so returning to
+// the app reveals exactly the screen the user left.
+function PrivacyOverlay() {
+  const [hidden, setHidden] = useState(AppState.currentState !== 'active')
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      setHidden(state !== 'active')
+    })
+    return () => sub.remove()
+  }, [])
+
+  if (!hidden) return null
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: colors.bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2000,
+        elevation: 2000,
+      }}
+    >
+      <Loader size={80} />
+    </View>
+  )
+}
+
 // Latest segments snapshot readable from non-React contexts (e.g. the
 // AppState listener that fires during background events).
 const segmentsRef = { current: [] as string[] }
@@ -179,19 +214,18 @@ export default function RootLayout() {
         // Only 'background' — NOT 'inactive'. iOS fires 'inactive' during
         // system dialogs (Face ID, share sheet, keyboard dictation, incoming
         // calls) and Android emits it during rapid app-switch flickers.
-        // Reacting to 'inactive' by locking + navigating causes a false-
-        // positive PIN prompt every time the user just glances away.
-        const wasUnlocked = pin.unlockedThisSession
+        //
+        // We only RECORD the time here (handleBackground). We deliberately do
+        // NOT lock the session or navigate to the PIN screen on background:
+        // doing so replaced the navigation stack, so a quick minimize dumped
+        // the user back on Home (losing the trade sheet / wallet / etc. they
+        // were on) and left the trade modal with nothing behind it — pressing
+        // back then closed the whole app. The screen is already blocked while
+        // away by FLAG_SECURE + the native privacy overlay and the JS
+        // <PrivacyOverlay/> below. The PIN is re-required on resume only if the
+        // grace window elapsed — handleForeground locks then, and AuthGate
+        // routes to the PIN screen.
         pin.handleBackground()
-        const auth = useAuthStore.getState()
-        // Skip the pre-navigate if user is already on PIN or on a login flow
-        // — the notification pull-down + Android background flicker would
-        // otherwise wipe any digits they've entered.
-        const currentSegs = segmentsRef.current
-        const alreadyOnAuth = currentSegs.some(s => s === 'pin' || s === 'login' || s === 'register' || s === 'reset')
-        if (wasUnlocked && auth.user && auth.hasPin && !alreadyOnAuth) {
-          router.replace('/(auth)/pin?mode=enter')
-        }
       }
     })
     return () => sub.remove()
@@ -234,6 +268,7 @@ export default function RootLayout() {
         <Stack.Screen name="allocation" options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: 320 }} />
       </Stack>
       <TransitionSplash />
+      <PrivacyOverlay />
       <BrandSplash />
       <ToastHost />
     </SafeAreaProvider>

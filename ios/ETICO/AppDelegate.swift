@@ -31,6 +31,36 @@ class AppDelegate: ExpoAppDelegate {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // MARK: - Privacy cover (minimize / app-switcher)
+  //
+  // iOS has no FLAG_SECURE. To match Android's native privacy overlay we drop an
+  // opaque branded view over the window the instant the app stops being active,
+  // so the task-switcher snapshot (taken right after willResignActive) and any
+  // glance show a blank screen instead of the user's financial data. This is
+  // purely native + visual: it never touches the JS session or navigation, so
+  // returning to the app reveals exactly the screen the user left. The JS
+  // <PrivacyOverlay/> is the cross-platform complement; this guarantees the
+  // cover is painted before the OS grabs its snapshot.
+  private var privacyCover: UIView?
+
+  public override func applicationWillResignActive(_ application: UIApplication) {
+    super.applicationWillResignActive(application)
+    guard privacyCover == nil, let window = self.window else { return }
+    let cover = UIView(frame: window.bounds)
+    // #131312 — same dark brand background as the Android overlay.
+    cover.backgroundColor = UIColor(red: 0x13/255.0, green: 0x13/255.0, blue: 0x12/255.0, alpha: 1.0)
+    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    window.addSubview(cover)
+    window.bringSubviewToFront(cover)
+    privacyCover = cover
+  }
+
+  public override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    privacyCover?.removeFromSuperview()
+    privacyCover = nil
+  }
+
   // Linking API
   public override func application(
     _ app: UIApplication,
