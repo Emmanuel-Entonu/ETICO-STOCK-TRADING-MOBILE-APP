@@ -30,3 +30,7 @@ firebase-*.json
 android/keystore.properties
 *.keystore
 !android/app/debug.keystore
+
+# EAS credentials
+credentials.json
+credentials/

@@ -1,0 +1,3 @@
+# Large files not needed by any EAS build (keeps uploads small).
+niqra-screen-recording.mp4
+screen.png
