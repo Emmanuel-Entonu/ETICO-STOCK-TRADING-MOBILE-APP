@@ -97,7 +97,7 @@ function FallbackBadge({ symbol, size }: { symbol: string; size: number }) {
     >
       <View
         style={{
-          ...StyleSheet.absoluteFillObject,
+          ...StyleSheet.absoluteFill,
           backgroundColor: light,
           opacity: 0.55,
           transform: [{ translateY: -size * 0.5 }, { scaleY: 0.6 }],

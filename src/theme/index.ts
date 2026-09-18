@@ -42,7 +42,9 @@ export const useThemeStore = create<ThemeStore>()(
 // Palette resolution
 // ─────────────────────────────────────────────────────────────────────
 export function resolveScheme(mode: ThemeMode): 'light' | 'dark' {
-  if (mode === 'system') return (Appearance.getColorScheme() ?? 'light')
+  // getColorScheme() can be 'light' | 'dark' | null | 'unspecified' — treat
+  // anything that isn't explicitly 'dark' as light.
+  if (mode === 'system') return Appearance.getColorScheme() === 'dark' ? 'dark' : 'light'
   return mode
 }
 
@@ -152,6 +154,6 @@ export function useThemedStyles<T>(factory: () => T): T {
 // both the user's stored mode choice and the OS-level scheme change.
 export function useEffectiveScheme(): 'light' | 'dark' {
   const mode      = useThemeStore(s => s.mode)
-  const sysScheme = useColorScheme() ?? 'light'
+  const sysScheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light'
   return mode === 'system' ? sysScheme : mode
 }

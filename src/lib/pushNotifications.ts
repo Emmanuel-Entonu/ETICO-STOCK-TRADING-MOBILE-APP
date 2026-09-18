@@ -6,9 +6,13 @@ import { config } from './config'
 import { naira } from './format'
 
 // How notifications behave when one arrives while the app is foregrounded.
+// SDK 53+ split the old `shouldShowAlert` into `shouldShowBanner` +
+// `shouldShowList`; set both so foreground trade/account alerts actually
+// surface as a banner (and land in the notification list) on iOS/Android.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),

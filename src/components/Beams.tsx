@@ -136,14 +136,14 @@ const Beams: FC<BeamsProps> = ({
 
   return (
     <View
-      style={[StyleSheet.absoluteFillObject, style]}
+      style={[StyleSheet.absoluteFill, style]}
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout
         setSize((s) => (s.width === width && s.height === height ? s : { width, height }))
       }}
     >
       {size.width > 0 && source ? (
-        <Canvas style={StyleSheet.absoluteFillObject}>
+        <Canvas style={StyleSheet.absoluteFill}>
           <Fill>
             <Shader source={source} uniforms={uniforms} />
           </Fill>

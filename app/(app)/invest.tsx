@@ -306,7 +306,7 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.bgSubtle,
   },
   heroContent: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,

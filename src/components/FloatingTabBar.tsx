@@ -1,6 +1,5 @@
 import { View, Pressable } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import * as Haptics from 'expo-haptics'
 import { Icon, Text } from '@/ui'
 import { radii, useEffectiveScheme } from '@/theme'
@@ -25,7 +24,21 @@ const PILL_BG_DARK  = '#1B211A'                // green-dark surface (dark palet
 const ACTIVE        = '#D4AF37'                // gold
 const INACTIVE      = 'rgba(234,237,231,0.55)' // quiet off-white
 
-export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
+// Minimal local type for the props expo-router's <Tabs tabBar> passes — the
+// @react-navigation/bottom-tabs types aren't resolvable as a direct dep here,
+// and this covers exactly what we read.
+type TabRoute = { key: string; name: string }
+interface FloatingTabBarProps {
+  state: { routes: TabRoute[]; index: number }
+  // Method-style (bivariant) signatures so the real @react-navigation
+  // BottomTabBarProps navigation the <Tabs tabBar> passes is assignable.
+  navigation: {
+    emit(e: { type: 'tabPress'; target: string; canPreventDefault: true }): { defaultPrevented: boolean }
+    navigate(name: string): void
+  }
+}
+
+export function FloatingTabBar({ state, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets()
   const scheme = useEffectiveScheme()
   const pillBg = scheme === 'dark' ? PILL_BG_DARK : PILL_BG_LIGHT

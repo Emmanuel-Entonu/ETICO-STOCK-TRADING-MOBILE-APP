@@ -146,7 +146,7 @@ function toneStyle(tone?: ToastTone) {
 
 const makeStyles = () => StyleSheet.create({
   host: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     zIndex: 9999,
     elevation: 9999,

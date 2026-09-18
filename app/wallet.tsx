@@ -259,7 +259,7 @@ const makeStyles = () => StyleSheet.create({
   // the right (paddingRight) and the peeking card up top (paddingTop). Percentage
   // insets keep the layout correct as the card scales.
   cardContent: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     paddingLeft: '7%',
     paddingRight: '24%',
     paddingTop: '11%',
