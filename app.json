@@ -13,6 +13,8 @@
     },
     "android": {
       "package": "ng.moneta.capital",
+      "versionCode": 4,
+      "allowBackup": false,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/etico-adaptive-foreground.png",
@@ -28,7 +30,19 @@
         {
           "color": "#DAA92F"
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "36.1.0"
+          }
+        }
+      ],
+      "./plugins/withEticoNative"
     ],
     "experiments": {
       "typedRoutes": true

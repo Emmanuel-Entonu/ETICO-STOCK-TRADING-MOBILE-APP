@@ -1,3 +1,15 @@
-# Large files not needed by any EAS build (keeps uploads small).
-niqra-screen-recording.mp4
-screen.png
+# Keep the EAS upload small — exclude build outputs and local-only artifacts.
+# (EAS regenerates native builds in the cloud; it only needs sources + config.)
+android.bak/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/app/.gradle/
+# Whole ios/ tree — not needed for an Android build.
+ios/
+**/*.apk
+**/*.aab
+**/*.keystore
+android/keystore.properties
+*.log

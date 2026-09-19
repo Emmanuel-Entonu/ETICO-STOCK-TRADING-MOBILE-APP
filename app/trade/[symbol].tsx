@@ -42,7 +42,7 @@ export default function TradeScreen() {
     router.replace('/(app)')
   }, [from, router])
   const { marketData, positions, orderLoading, orderResult, placeOrder, clearOrderResult, loadMarketData, loadAccount } = usePortfolioStore()
-  const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, debitWallet, creditWallet } = useAuthStore()
+  const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, refreshWalletBalance } = useAuthStore()
   const unlocked = usePinStore((s) => s.unlockedThisSession)
   const insets = useSafeAreaInsets()
 
@@ -112,14 +112,14 @@ export default function TradeScreen() {
     if (orderResult?.success && pendingRef.current) {
       const done = pendingRef.current
       setReceipt({ ...done, orderNo: orderResult.orderId })
-      // Ledger move: a BUY spends from the wallet, a SELL returns proceeds.
-      // (PAC executes against the float; the VA settles PAC behind the scenes.)
+      // The wallet mirrors the live PAC cash balance. The order just moved PAC
+      // cash (a BUY spends, a SELL returns proceeds on settlement), so re-pull
+      // the balance from PAC rather than hand-editing a separate ledger.
       // Use a blocking Alert on failure so the error can't be lost behind the
       // receipt sheet / navigation.
       ;(async () => {
         try {
-          if (done.side === 'BUY') await debitWallet(done.total)
-          else await creditWallet(done.total)
+          await refreshWalletBalance()
         } catch (e) {
           Alert.alert('Wallet not updated', String((e as Error).message))
         }
@@ -166,8 +166,8 @@ export default function TradeScreen() {
   const effectivePrice = limitCheck?.ok ? limitCheck.value : stockPrice
   const estimatedTotal = effectivePrice * qty
   const orderTotal = validation?.totalValue ?? estimatedTotal
-  // Buying power = the app-tracked wallet (funded from the Moneta VA). The user
-  // spends against this; PAC is funded server-side and settled EOD.
+  // Buying power = the live PAC account cash balance, mirrored into walletBalance.
+  // Funding the VA deposits into the user's own PAC account; this is that balance.
   const walletCash = walletBalance
   const sellQtyInvalid = side === 'SELL' && qty > maxSellQty
   const sellNoHolding  = side === 'SELL' && maxSellQty === 0
@@ -531,7 +531,9 @@ export default function TradeScreen() {
           }
           const authoritativeTotal = validation.totalValue
           if (side === 'BUY') {
-            const freshCash = usePortfolioStore.getState().account?.balance ?? walletCash
+            // Single source of truth: the live PAC balance mirrored into the
+            // wallet. (PAC also rejects an underfunded order at placement.)
+            const freshCash = walletCash
             if (freshCash < authoritativeTotal) {
               toast.warn('Trade canceled','Insufficient wallet balance for the fee-inclusive total.')
               setPinOpen(false); setConfirmOpen(false)

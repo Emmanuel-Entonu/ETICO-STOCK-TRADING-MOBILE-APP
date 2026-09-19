@@ -139,7 +139,7 @@ export default function HomeScreen() {
                 backgroundColor="#0B0C08"   // near-black canvas
                 ambientColor="#4C5A38"      // brand green wash in the valleys
                 ambientIntensity={0.9}
-                speed={2}
+                speed={2.6}
                 noiseIntensity={1.4}
                 scale={0.2}
                 rotation={30}

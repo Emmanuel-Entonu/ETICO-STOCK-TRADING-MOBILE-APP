@@ -2,11 +2,12 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import {
-  validateEmail, validatePassword, validateFullName, validateNairaAmount,
+  validateEmail, validatePassword, validateFullName,
   validateNigerianPhone,
 } from '@/lib/validation'
 import { usePinStore } from '@/store/pinStore'
 import { createVirtualAccount } from '@/lib/monetaApi'
+import { getAccountById } from '@/lib/pacApi'
 // NOTE: `usePortfolioStore` is imported lazily inside `signOut` to avoid a
 // module-load circular import (portfolioStore already imports this file).
 
@@ -36,11 +37,10 @@ interface AuthState {
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<string | null>
   signOut: () => Promise<void>
   loadProfile: () => Promise<void>
-  creditWallet: (amountNaira: number) => Promise<void>
-  debitWallet: (amountNaira: number) => Promise<void>
   // Lazily create the Moneta VA from the user's KYC identity, then persist it.
   ensureWallet: () => Promise<void>
-  // Pull the live balance from Moneta and reflect it in walletBalance.
+  // Pull the LIVE PAC account cash balance and reflect it in walletBalance.
+  // The wallet is a mirror of the user's PAC account — not a separate ledger.
   refreshWalletBalance: () => Promise<void>
 }
 
@@ -173,6 +173,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         vaBank: profile.va_bank ?? null,
         vaAccountName: profile.va_account_name ?? null,
       })
+      // wallet_balance above is only an instant-paint fallback. The wallet is a
+      // mirror of the live PAC cash balance, so pull the real value now.
+      if (profile.pac_account_id) get().refreshWalletBalance().catch(() => {})
     } else if (!fetchError || fetchError.code === 'PGRST116') {
       // Create the row for a brand-new user. Must be INSERT-only (DO NOTHING):
       // a plain upsert compiles to INSERT ... ON CONFLICT DO UPDATE, which needs
@@ -194,32 +197,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     })()
     return _loadProfileInFlight
-  },
-
-  creditWallet: async (amountNaira) => {
-    const { user } = get()
-    if (!user) throw new Error('Not authenticated')
-    // Round to kobo first — PAC totals carry many decimals which would fail the
-    // 2-decimal check. Trades can be tiny, so no ₦100 funding minimum here.
-    const amt = validateNairaAmount(Math.round(amountNaira * 100) / 100, { min: 0.01 })
-    if (!amt.ok) throw new Error(amt.error)
-    // New RPC signature: no user_id parameter — auth.uid() enforced server-side.
-    const { data, error } = await supabase.rpc('increment_wallet', { delta: amt.value })
-    if (error) throw new Error(error.message)
-    set({ walletBalance: data as number })
-  },
-
-  debitWallet: async (amountNaira) => {
-    const { user } = get()
-    if (!user) throw new Error('Not authenticated')
-    // Round to kobo first — PAC totals carry many decimals which would fail the
-    // 2-decimal check. Trades can be tiny, so no ₦100 funding minimum here.
-    const amt = validateNairaAmount(Math.round(amountNaira * 100) / 100, { min: 0.01 })
-    if (!amt.ok) throw new Error(amt.error)
-    const { data, error } = await supabase.rpc('decrement_wallet', { delta: amt.value })
-    if (error) throw new Error(error.message)
-    if (data === null) throw new Error('Insufficient wallet balance')
-    set({ walletBalance: data as number })
   },
 
   ensureWallet: async () => {
@@ -294,16 +271,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   refreshWalletBalance: async () => {
-    // The wallet is the app-tracked ledger (profiles.wallet_balance): the
-    // reconciler credits deposits into it, and every trade debits/credits it.
-    // The user spends against this; the VA cash settles PAC behind the scenes.
-    const { user } = get()
+    // The wallet is a live MIRROR of the user's PAC account cash balance — the
+    // single source of truth. Funding a VA posts a DEPOSIT into the user's own
+    // PAC account (server reconciler); buys/sells move that PAC cash. We simply
+    // read it back. The actual VA cash is invisible to the user.
+    const { user, pacAccountId } = get()
     if (!user) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('wallet_balance')
-      .eq('id', user.id)
-      .single()
-    if (data) set({ walletBalance: data.wallet_balance ?? 0 })
+    if (!pacAccountId) { set({ walletBalance: 0 }); return }
+    try {
+      const acct = await getAccountById(pacAccountId)
+      const bal = Number(acct.balance)
+      // On a network blip keep the last-known value rather than flashing ₦0.
+      if (Number.isFinite(bal)) set({ walletBalance: bal })
+    } catch (e) {
+      console.warn('[wallet] PAC balance refresh failed:', (e as Error).message)
+    }
   },
 }))

@@ -34,3 +34,6 @@ android/keystore.properties
 # EAS credentials
 credentials.json
 credentials/
+
+# Local pre-migration backup of android/ (not for VCS)
+android.bak/
