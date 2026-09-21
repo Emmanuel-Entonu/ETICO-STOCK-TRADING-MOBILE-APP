@@ -9,7 +9,7 @@ import * as Clipboard from 'expo-clipboard'
 import { useShallow } from 'zustand/react/shallow'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
-import { syncWalletFunding, getVaTransactions, getVirtualAccountBalance, type VaTransaction } from '@/lib/monetaApi'
+import { syncWalletFunding, getVaTransactions, type VaTransaction } from '@/lib/monetaApi'
 import { supabase } from '@/lib/supabase'
 import { Text, Row, Button, Icon, Loader, toast } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
@@ -47,12 +47,11 @@ export default function WalletScreen() {
   const cardH = cardW / 2.1
 
   const {
-    kycStatus, walletBalance, vaAvailable, vaReference,
+    kycStatus, walletBalance, vaAvailable,
     vaNumber, vaBank, vaAccountName,
     ensureWallet, refreshWalletBalance, refreshVaAvailable,
   } = useAuthStore(useShallow(s => ({
     kycStatus: s.kycStatus, walletBalance: s.walletBalance, vaAvailable: s.vaAvailable,
-    vaReference: s.vaReference,
     vaNumber: s.vaNumber, vaBank: s.vaBank, vaAccountName: s.vaAccountName,
     ensureWallet: s.ensureWallet, refreshWalletBalance: s.refreshWalletBalance,
     refreshVaAvailable: s.refreshVaAvailable,
@@ -63,7 +62,6 @@ export default function WalletScreen() {
   const [error, setError] = useState<string | null>(null)
   const [ledger, setLedger] = useState<LedgerRow[]>([])
   const [vaTx, setVaTx] = useState<VaTransaction[]>([])
-  const [vaBalance, setVaBalance] = useState<number | null>(null)   // live Moneta VA balance
   const [activityTab, setActivityTab] = useState<'deposits' | 'moves'>('deposits')
 
   const kycDone = kycStatus === 'verified' || kycStatus === 'submitted'
@@ -85,22 +83,12 @@ export default function WalletScreen() {
     catch (e) { console.warn('[wallet] VA transactions load failed:', (e as Error).message) }
   }, [])
 
-  // Live balance sitting in the Moneta virtual account (Providus). Distinct from
-  // va_available (the part reconciled + free to move into the trading wallet).
-  const loadVaBalance = useCallback(async () => {
-    if (!vaReference) return
-    try {
-      const b = await getVirtualAccountBalance(vaReference)
-      if (b != null) setVaBalance(b)
-    } catch (e) { console.warn('[wallet] VA balance load failed:', (e as Error).message) }
-  }, [vaReference])
-
   // Pull everything fresh: detect new VA deposits (credits va_available), then
-  // read va_available + the live PAC wallet balance + the VA balance + feeds.
+  // read va_available + the live PAC wallet balance + both activity feeds.
   const syncAll = useCallback(async () => {
     await syncWalletFunding()               // server credits va_available on new deposits
-    await Promise.all([refreshVaAvailable(), refreshWalletBalance(), loadVaBalance(), loadLedger(), loadVaTx()])
-  }, [refreshVaAvailable, refreshWalletBalance, loadVaBalance, loadLedger, loadVaTx])
+    await Promise.all([refreshVaAvailable(), refreshWalletBalance(), loadLedger(), loadVaTx()])
+  }, [refreshVaAvailable, refreshWalletBalance, loadLedger, loadVaTx])
 
   const provision = useCallback(async () => {
     if (!kycDone) return
@@ -234,27 +222,24 @@ export default function WalletScreen() {
 
         {hasWallet && (
           <>
-            {/* ── Virtual account: live VA balance + amount free to move ── */}
+            {/* ── Virtual account: money available to move into the wallet ──
+                Shows va_available (reconciled deposits), NOT the raw Moneta VA
+                balance — Providus sweeps the VA to ~0, so that figure is always
+                empty and misleading. va_available is what the user can actually
+                move to their trading wallet. */}
             <View style={styles.vaCard}>
               <Row align="center" justify="space-between">
                 <View>
-                  <Text variant="eyebrow" tone="muted">VIRTUAL ACCOUNT BALANCE</Text>
+                  <Text variant="eyebrow" tone="muted">VIRTUAL ACCOUNT</Text>
                   <Text style={styles.vaBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                    {naira(vaBalance ?? vaAvailable)}
+                    {naira(vaAvailable)}
                   </Text>
                 </View>
                 <Icon name="solar:card-transfer-bold" size={28} color={colors.brand} />
               </Row>
               <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-                Money sitting in your Providus virtual account.
+                Money in your account, available to move into your trading wallet.
               </Text>
-
-              {/* Amount reconciled + free to move into the trading wallet. */}
-              <Row align="center" justify="space-between" style={styles.vaAvailRow}>
-                <Text variant="small" tone="muted">Available to move</Text>
-                <Text variant="smallStrong" tone={vaAvailable > 0 ? 'brand' : 'muted'}>{naira(vaAvailable)}</Text>
-              </Row>
-
               <View style={{ height: spacing.lg }} />
               <Button
                 title="Fund wallet"
@@ -496,12 +481,6 @@ const makeStyles = () => StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.5,
     marginTop: 4,
-  },
-  vaAvailRow: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   infoCard: {
     marginTop: spacing['2xl'],
