@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { View, Pressable, TextInput, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -30,6 +30,10 @@ export default function FundWalletScreen() {
   const [phase, setPhase] = useState<Phase>('input')
   const [errMsg, setErrMsg] = useState<string | null>(null)
   const [pinOpen, setPinOpen] = useState(false)
+  // Auto-return timer — cleared on unmount so router.back() can't fire on a
+  // torn-down screen (stray navigation on iOS).
+  const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (returnTimer.current) clearTimeout(returnTimer.current) }, [])
 
   const amt = Math.round(Number(amount) * 100) / 100
   const valid = Number.isFinite(amt) && amt >= 0.01 && amt <= vaAvailable
@@ -53,7 +57,8 @@ export default function FundWalletScreen() {
     try {
       await fundWalletFromVa(amt)
       setPhase('success')
-      setTimeout(() => {
+      returnTimer.current = setTimeout(() => {
+        returnTimer.current = null
         toast.success('On its way', 'Your wallet balance will update shortly — no need to refresh.')
         router.back()
       }, 1200)
