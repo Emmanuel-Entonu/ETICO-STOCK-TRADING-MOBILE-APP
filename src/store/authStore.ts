@@ -6,7 +6,7 @@ import {
   validateNigerianPhone,
 } from '@/lib/validation'
 import { usePinStore } from '@/store/pinStore'
-import { createVirtualAccount } from '@/lib/monetaApi'
+import { createVirtualAccount, fundWalletFromVa as fundWalletFromVaApi } from '@/lib/monetaApi'
 import { getAccountById } from '@/lib/pacApi'
 // NOTE: `usePortfolioStore` is imported lazily inside `signOut` to avoid a
 // module-load circular import (portfolioStore already imports this file).
@@ -24,7 +24,8 @@ interface AuthState {
   cacsStatus: CacsStatus
   cacsDocUrl: string | null
   cacsRejectionReason: string | null
-  walletBalance: number
+  walletBalance: number       // live PAC trading-wallet balance (buying power)
+  vaAvailable: number         // Virtual Account balance available to fund the wallet
   hasPin: boolean
   // Moneta virtual account (wallet)
   vaReference: string | null
@@ -42,6 +43,11 @@ interface AuthState {
   // Pull the LIVE PAC account cash balance and reflect it in walletBalance.
   // The wallet is a mirror of the user's PAC account — not a separate ledger.
   refreshWalletBalance: () => Promise<void>
+  // Re-read the Virtual Account balance (va_available) from the profile.
+  refreshVaAvailable: () => Promise<void>
+  // Move `amountNaira` from the VA into the PAC trading wallet (fires the
+  // cash_transactions endpoint server-side). Updates vaAvailable + walletBalance.
+  fundWalletFromVa: (amountNaira: number) => Promise<void>
 }
 
 // Single-flight guard for loadProfile — see comment in loadProfile.
@@ -61,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   cacsDocUrl: null,
   cacsRejectionReason: null,
   walletBalance: 0,
+  vaAvailable: 0,
   hasPin: false,
   vaReference: null,
   vaNumber: null,
@@ -129,7 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: null, session: null, pacAccountId: null,
       kycStatus: 'pending', cacsStatus: 'not_submitted',
       cacsDocUrl: null, cacsRejectionReason: null,
-      walletBalance: 0, profileReady: false, hasPin: false,
+      walletBalance: 0, vaAvailable: 0, profileReady: false, hasPin: false,
       vaReference: null, vaNumber: null, vaBank: null, vaAccountName: null,
     })
     // scope:'local' clears the token from expo-secure-store on this device
@@ -152,7 +159,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
     const { data: profile, error: fetchError } = await supabase
       .from('profiles')
-      .select('pac_account_id, kyc_status, wallet_balance, cacs_status, cacs_doc_url, cacs_rejection_reason, email, has_pin, va_reference, va_number, va_bank, va_account_name')
+      .select('pac_account_id, kyc_status, wallet_balance, va_available, cacs_status, cacs_doc_url, cacs_rejection_reason, email, has_pin, va_reference, va_number, va_bank, va_account_name')
       .eq('id', user.id)
       .single()
 
@@ -167,6 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         cacsDocUrl: profile.cacs_doc_url ?? null,
         cacsRejectionReason: profile.cacs_rejection_reason ?? null,
         walletBalance: profile.wallet_balance ?? 0,
+        vaAvailable: profile.va_available ?? 0,
         hasPin: !!profile.has_pin,
         vaReference: profile.va_reference ?? null,
         vaNumber: profile.va_number ?? null,
@@ -286,5 +294,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (e) {
       console.warn('[wallet] PAC balance refresh failed:', (e as Error).message)
     }
+  },
+
+  refreshVaAvailable: async () => {
+    // va_available = money in the Virtual Account available to move into the
+    // trading wallet. The server reconciler credits it on new VA deposits.
+    const { user } = get()
+    if (!user) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('va_available')
+      .eq('id', user.id)
+      .single()
+    if (data) set({ vaAvailable: Number(data.va_available ?? 0) })
+  },
+
+  fundWalletFromVa: async (amountNaira) => {
+    // Server reserves from va_available, fires the cash_transactions DEPOSIT to
+    // PAC, and writes the ledger. On success reflect the new VA balance and
+    // re-pull the live PAC wallet balance (which just went up).
+    const { vaAvailable } = await fundWalletFromVaApi(amountNaira)
+    set({ vaAvailable })
+    await get().refreshWalletBalance()
   },
 }))

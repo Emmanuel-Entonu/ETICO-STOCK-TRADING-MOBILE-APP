@@ -1,80 +1,152 @@
-import { useCallback, useEffect, useState } from 'react'
-import { View, ScrollView, Pressable, RefreshControl, StyleSheet, Image, useWindowDimensions } from 'react-native'
+import { useCallback, useState } from 'react'
+import {
+  View, ScrollView, Pressable, RefreshControl, StyleSheet, Image,
+  useWindowDimensions,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import { useShallow } from 'zustand/react/shallow'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
-import { syncWalletFunding } from '@/lib/monetaApi'
-import { Text, Row, Stack, Button, Icon, Loader, toast } from '@/ui'
+import { syncWalletFunding, getVaTransactions, getVirtualAccountBalance, type VaTransaction } from '@/lib/monetaApi'
+import { supabase } from '@/lib/supabase'
+import { Text, Row, Button, Icon, Loader, toast } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
+
+interface LedgerRow {
+  id: number
+  type: 'deposit' | 'funding' | 'reversal' | 'payout'
+  amount: number
+  balance_after: number
+  created_at: string
+}
+
+const LEDGER_META: Record<LedgerRow['type'], { label: string; icon: string; positive: boolean }> = {
+  deposit:  { label: 'Deposit received',   icon: 'solar:arrow-down-bold',        positive: true  },
+  funding:  { label: 'Moved to wallet',    icon: 'solar:arrow-right-up-bold',    positive: false },
+  reversal: { label: 'Funding reversed',   icon: 'solar:refresh-bold',           positive: true  },
+  payout:   { label: 'Payout',             icon: 'solar:arrow-up-bold',          positive: false },
+}
+
+function fmtDate(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ', ' +
+      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
+}
 
 export default function WalletScreen() {
   const router = useRouter()
   const styles = useThemedStyles(makeStyles)
 
-  // Explicit card size from the screen width. The card bleeds nearly full-width
-  // (a bit wider than the padded text below) for presence; height follows the
-  // wallet PNG's 2.3 ratio. Driving size directly is more reliable than aspectRatio.
   const { width: screenW } = useWindowDimensions()
   const cardW = screenW
-  // Taller than the PNG's native 2.3 ratio for more vertical presence (the image
-  // uses resizeMode="stretch", so the extra height fills instead of letterboxing).
   const cardH = cardW / 2.1
 
   const {
-    kycStatus, walletBalance,
-    vaReference, vaNumber, vaBank, vaAccountName,
-    ensureWallet, refreshWalletBalance,
+    kycStatus, walletBalance, vaAvailable, vaReference,
+    vaNumber, vaBank, vaAccountName,
+    ensureWallet, refreshWalletBalance, refreshVaAvailable,
   } = useAuthStore(useShallow(s => ({
-    kycStatus: s.kycStatus, walletBalance: s.walletBalance,
-    vaReference: s.vaReference, vaNumber: s.vaNumber, vaBank: s.vaBank, vaAccountName: s.vaAccountName,
+    kycStatus: s.kycStatus, walletBalance: s.walletBalance, vaAvailable: s.vaAvailable,
+    vaReference: s.vaReference,
+    vaNumber: s.vaNumber, vaBank: s.vaBank, vaAccountName: s.vaAccountName,
     ensureWallet: s.ensureWallet, refreshWalletBalance: s.refreshWalletBalance,
+    refreshVaAvailable: s.refreshVaAvailable,
   })))
 
   const [provisioning, setProvisioning] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [ledger, setLedger] = useState<LedgerRow[]>([])
+  const [vaTx, setVaTx] = useState<VaTransaction[]>([])
+  const [vaBalance, setVaBalance] = useState<number | null>(null)   // live Moneta VA balance
+  const [activityTab, setActivityTab] = useState<'deposits' | 'moves'>('deposits')
 
   const kycDone = kycStatus === 'verified' || kycStatus === 'submitted'
   const hasWallet = !!vaNumber
 
-  // On open: create the VA if the user doesn't have one yet, then pull balance.
+  const loadLedger = useCallback(async () => {
+    const { data } = await supabase
+      .from('va_ledger')
+      .select('id, type, amount, balance_after, created_at')
+      .order('created_at', { ascending: false })
+      .limit(25)
+    setLedger((data as LedgerRow[]) ?? [])
+  }, [])
+
+  // Real Moneta VA transaction history (bank credits/debits into the VA).
+  // Best-effort — a failure here shouldn't blank the rest of the wallet.
+  const loadVaTx = useCallback(async () => {
+    try { setVaTx(await getVaTransactions()) }
+    catch (e) { console.warn('[wallet] VA transactions load failed:', (e as Error).message) }
+  }, [])
+
+  // Live balance sitting in the Moneta virtual account (Providus). Distinct from
+  // va_available (the part reconciled + free to move into the trading wallet).
+  const loadVaBalance = useCallback(async () => {
+    if (!vaReference) return
+    try {
+      const b = await getVirtualAccountBalance(vaReference)
+      if (b != null) setVaBalance(b)
+    } catch (e) { console.warn('[wallet] VA balance load failed:', (e as Error).message) }
+  }, [vaReference])
+
+  // Pull everything fresh: detect new VA deposits (credits va_available), then
+  // read va_available + the live PAC wallet balance + the VA balance + feeds.
+  const syncAll = useCallback(async () => {
+    await syncWalletFunding()               // server credits va_available on new deposits
+    await Promise.all([refreshVaAvailable(), refreshWalletBalance(), loadVaBalance(), loadLedger(), loadVaTx()])
+  }, [refreshVaAvailable, refreshWalletBalance, loadVaBalance, loadLedger, loadVaTx])
+
   const provision = useCallback(async () => {
     if (!kycDone) return
     setError(null)
     setProvisioning(true)
     try {
       await ensureWallet()
-      await syncWalletFunding()          // pull any new VA deposit into the wallet now
-      await refreshWalletBalance()
+      await syncAll()
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setProvisioning(false)
     }
-  }, [kycDone, ensureWallet, refreshWalletBalance])
+  }, [kycDone, ensureWallet, syncAll])
 
-  useEffect(() => {
+  // Runs on first focus AND every time the wallet regains focus — e.g. after the
+  // fund-wallet page closes — so the balances + activity refresh on return.
+  useFocusEffect(useCallback(() => {
     if (kycDone && !hasWallet) provision()
-    else if (hasWallet) syncWalletFunding().then(refreshWalletBalance).catch(() => {})
+    else if (hasWallet) syncAll().catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [kycDone, hasWallet, provision, syncAll]))
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      if (hasWallet) { await syncWalletFunding(); await refreshWalletBalance() }
+      if (hasWallet) await syncAll()
       else await provision()
     } catch { /* surfaced via error state / toast */ }
     finally { setRefreshing(false) }
-  }, [hasWallet, refreshWalletBalance, provision])
+  }, [hasWallet, syncAll, provision])
 
   const copy = async (label: string, value: string) => {
     await Clipboard.setStringAsync(value)
     toast.success('Copied', `${label} copied to clipboard`)
+  }
+
+  // Funding now lives on its own pop-up page (app/fund-wallet.tsx). It handles
+  // the amount input, the wait-for-PAC, the success state + auto-return, and the
+  // masked error. The wallet re-syncs on focus when that page closes.
+  const openFund = () => {
+    if (vaAvailable <= 0) {
+      toast.info('Nothing to move', 'Deposit to your virtual account first.')
+      return
+    }
+    router.push('/fund-wallet' as never)
   }
 
   return (
@@ -92,9 +164,7 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
       >
-        {/* ── Balance card — leather wallet graphic with content overlaid on the
-             left face (kept clear of the gold snap on the right). The card
-             scales with screen width via aspectRatio, so it's responsive. ── */}
+        {/* ── Trading wallet (live PAC balance = buying power) ── */}
         <MotiView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -108,7 +178,7 @@ export default function WalletScreen() {
           />
           <View style={styles.cardContent}>
             <View>
-              <Text style={styles.balanceEyebrow}>WALLET BALANCE</Text>
+              <Text style={styles.balanceEyebrow}>TRADING WALLET</Text>
               <Text
                 style={styles.balanceValue}
                 numberOfLines={1}
@@ -118,8 +188,8 @@ export default function WalletScreen() {
                 {naira(walletBalance)}
               </Text>
               <Row gap="sm" align="center" style={{ marginTop: spacing.xs }}>
-                <Icon name="solar:shield-check-bold" size={13} color="rgba(255,255,255,0.6)" />
-                <Text style={styles.balanceSub}>Funds you add are tracked here</Text>
+                <Icon name="solar:wallet-money-bold" size={13} color="rgba(255,255,255,0.6)" />
+                <Text style={styles.balanceSub}>Your buying power on the exchange</Text>
               </Row>
             </View>
           </View>
@@ -162,14 +232,43 @@ export default function WalletScreen() {
           </View>
         )}
 
-        {/* ── Virtual account details ── */}
         {hasWallet && (
           <>
+            {/* ── Virtual account: live VA balance + amount free to move ── */}
+            <View style={styles.vaCard}>
+              <Row align="center" justify="space-between">
+                <View>
+                  <Text variant="eyebrow" tone="muted">VIRTUAL ACCOUNT BALANCE</Text>
+                  <Text style={styles.vaBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                    {naira(vaBalance ?? vaAvailable)}
+                  </Text>
+                </View>
+                <Icon name="solar:card-transfer-bold" size={28} color={colors.brand} />
+              </Row>
+              <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
+                Money sitting in your Providus virtual account.
+              </Text>
+
+              {/* Amount reconciled + free to move into the trading wallet. */}
+              <Row align="center" justify="space-between" style={styles.vaAvailRow}>
+                <Text variant="small" tone="muted">Available to move</Text>
+                <Text variant="smallStrong" tone={vaAvailable > 0 ? 'brand' : 'muted'}>{naira(vaAvailable)}</Text>
+              </Row>
+
+              <View style={{ height: spacing.lg }} />
+              <Button
+                title="Fund wallet"
+                onPress={openFund}
+                disabled={vaAvailable <= 0}
+              />
+            </View>
+
+            {/* ── Deposit details ── */}
             <Text variant="eyebrow" tone="muted" style={{ marginTop: spacing['2xl'], marginBottom: spacing.md }}>
-              FUND YOUR WALLET
+              ADD MONEY
             </Text>
             <Text variant="small" tone="muted" style={{ marginBottom: spacing.lg }}>
-              Transfer to this dedicated account from any bank. Your wallet is credited automatically.
+              Transfer to this dedicated account from any bank. It shows up in your virtual account, then you move what you want into your trading wallet.
             </Text>
 
             <View style={styles.detailCard}>
@@ -185,13 +284,99 @@ export default function WalletScreen() {
               <DetailRow label="Account name" value={vaAccountName ?? '—'} />
             </View>
 
+            {/* ── Activity ── two feeds: real VA deposits, and wallet moves. */}
+            <Text variant="eyebrow" tone="muted" style={{ marginTop: spacing['2xl'], marginBottom: spacing.md }}>
+              ACTIVITY
+            </Text>
+            <View style={styles.segment}>
+              <SegmentTab label="Deposits" active={activityTab === 'deposits'} onPress={() => setActivityTab('deposits')} />
+              <SegmentTab label="Wallet moves" active={activityTab === 'moves'} onPress={() => setActivityTab('moves')} />
+            </View>
+            <View style={{ height: spacing.md }} />
+
+            {activityTab === 'deposits' ? (
+              vaTx.length === 0 ? (
+                <View style={styles.emptyLedger}>
+                  <Icon name="solar:clock-circle-linear" size={22} color={colors.textMuted} />
+                  <Text variant="small" tone="muted" style={{ marginTop: spacing.sm }}>No deposits yet</Text>
+                  <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs, paddingHorizontal: spacing.lg }}>
+                    Transfers into your virtual account show up here.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.detailCard}>
+                  {vaTx.map((t, i) => {
+                    const credit = t.type === 'credit'
+                    return (
+                      <View key={t.id}>
+                        {i > 0 && <View style={styles.detailDivider} />}
+                        <Row align="center" gap="md" style={{ paddingVertical: spacing.md, paddingHorizontal: spacing.lg }}>
+                          <View style={styles.ledgerIcon}>
+                            <Icon
+                              name={credit ? 'solar:arrow-down-bold' : 'solar:arrow-up-bold'}
+                              size={16}
+                              color={credit ? colors.positive : colors.text}
+                            />
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text variant="bodyStrong" numberOfLines={1}>{credit ? 'Deposit received' : (t.party || 'Debit')}</Text>
+                            <Text variant="small" tone="muted">
+                              {fmtDate(new Date(t.ts).toISOString())}
+                              {t.fee > 0 ? ` · fee ${naira(t.fee)}` : ''}
+                              {t.status === 'failed' ? ' · failed' : ''}
+                            </Text>
+                          </View>
+                          <Text variant="bodyStrong" style={{ color: credit ? colors.positive : colors.text }}>
+                            {credit ? '+' : '−'}{naira(Math.abs(t.amount))}
+                          </Text>
+                        </Row>
+                      </View>
+                    )
+                  })}
+                </View>
+              )
+            ) : (
+              ledger.length === 0 ? (
+                <View style={styles.emptyLedger}>
+                  <Icon name="solar:clock-circle-linear" size={22} color={colors.textMuted} />
+                  <Text variant="small" tone="muted" style={{ marginTop: spacing.sm }}>No wallet moves yet</Text>
+                </View>
+              ) : (
+                <View style={styles.detailCard}>
+                  {ledger.map((row, i) => {
+                    const meta = LEDGER_META[row.type] ?? LEDGER_META.deposit
+                    return (
+                      <View key={row.id}>
+                        {i > 0 && <View style={styles.detailDivider} />}
+                        <Row align="center" gap="md" style={{ paddingVertical: spacing.md, paddingHorizontal: spacing.lg }}>
+                          <View style={styles.ledgerIcon}>
+                            <Icon name={meta.icon} size={16} color={meta.positive ? colors.positive : colors.text} />
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text variant="bodyStrong" numberOfLines={1}>{meta.label}</Text>
+                            <Text variant="small" tone="muted">{fmtDate(row.created_at)}</Text>
+                          </View>
+                          <Text
+                            variant="bodyStrong"
+                            style={{ color: meta.positive ? colors.positive : colors.text }}
+                          >
+                            {meta.positive ? '+' : '−'}{naira(Math.abs(Number(row.amount)))}
+                          </Text>
+                        </Row>
+                      </View>
+                    )
+                  })}
+                </View>
+              )
+            )}
+
             <View style={{ height: spacing['2xl'] }} />
 
-            {/* Withdraw — intentionally does nothing yet */}
+            {/* Withdraw — payouts to settlement account (coming soon) */}
             <Button
               title="Withdraw"
               variant="secondary"
-              onPress={() => toast.info('Withdraw', 'Withdrawals will be available soon.')}
+              onPress={() => toast.info('Withdraw', 'Payouts to your settlement account are coming soon.')}
             />
             <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.md }}>
               Withdrawals are coming soon.
@@ -231,6 +416,24 @@ function DetailRow({ label, value, onCopy, emphasize }: {
   )
 }
 
+function SegmentTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[segmentTabStyle, active && { backgroundColor: colors.brand }]}>
+      <Text variant="smallStrong" style={{ color: active ? colors.textOnBrand : colors.textMuted }}>{label}</Text>
+    </Pressable>
+  )
+}
+
+const segmentTabStyle = {
+  flex: 1,
+  flexDirection: 'row' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  paddingVertical: spacing.sm,
+  borderRadius: radii.pill,
+  backgroundColor: 'transparent' as const,
+}
+
 const copyBtn = {
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
@@ -247,17 +450,11 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.bgSubtle,
   },
-  // Size is set inline from the screen width (see component). Negative side
-  // margins let it bleed past the ScrollView's spacing.xl padding so the card
-  // sits wider than the text below. overflow:hidden clips any stray overscale.
   cardWrap: {
     alignSelf: 'center',
-    marginHorizontal: -spacing.xl,   // full-bleed past the ScrollView padding
+    marginHorizontal: -spacing.xl,
     overflow: 'hidden',
   },
-  // Overlay sits on the flat left leather face: kept clear of the gold snap on
-  // the right (paddingRight) and the peeking card up top (paddingTop). Percentage
-  // insets keep the layout correct as the card scales.
   cardContent: {
     ...StyleSheet.absoluteFill,
     paddingLeft: '7%',
@@ -274,7 +471,7 @@ const makeStyles = () => StyleSheet.create({
   },
   balanceValue: {
     fontSize: 30,
-    lineHeight: 40,        // explicit line height — without it Android clips the tall glyphs
+    lineHeight: 40,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -0.5,
@@ -284,6 +481,27 @@ const makeStyles = () => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.6)',
+  },
+  vaCard: {
+    marginTop: spacing['2xl'],
+    padding: spacing.xl,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  vaBalance: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: colors.text,
+    letterSpacing: -0.5,
+    marginTop: 4,
+  },
+  vaAvailRow: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   infoCard: {
     marginTop: spacing['2xl'],
@@ -306,5 +524,25 @@ const makeStyles = () => StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginHorizontal: spacing.lg,
+  },
+  ledgerIcon: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.bgSubtle,
+  },
+  emptyLedger: {
+    alignItems: 'center',
+    paddingVertical: spacing['2xl'],
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  segment: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.bgSubtle,
   },
 })

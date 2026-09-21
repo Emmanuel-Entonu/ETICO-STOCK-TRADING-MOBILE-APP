@@ -88,7 +88,7 @@ const CanvasWrapper: FC<{ children: ReactNode; backgroundColor: string; style?: 
   style,
 }) => (
   <View style={[StyleSheet.absoluteFill, { backgroundColor }, style]}>
-    <Canvas dpr={[1, 2]} frameloop="always" style={{ flex: 1 }}>
+    <Canvas frameloop="always" style={{ flex: 1 }}>
       {children}
     </Canvas>
   </View>

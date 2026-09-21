@@ -41,6 +41,17 @@ export default function TradeScreen() {
     if (from) { router.replace(from as never); return }
     router.replace('/(app)')
   }, [from, router])
+
+  // iOS can only present ONE modal at a time: opening a <Modal> while another is
+  // still dismissing silently no-ops (this made "confirm buy" do nothing on iOS
+  // — the PIN sheet never appeared). So when moving between the order-sheet →
+  // confirm → legal → PIN modals, close the current one and open the next only
+  // after its dismiss animation finishes. Android stacks fine, so open at once.
+  const transitionModal = useCallback((close: () => void, open: () => void) => {
+    close()
+    if (Platform.OS === 'ios') setTimeout(open, 450)
+    else open()
+  }, [])
   const { marketData, positions, orderLoading, orderResult, placeOrder, clearOrderResult, loadMarketData, loadAccount } = usePortfolioStore()
   const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, refreshWalletBalance } = useAuthStore()
   const unlocked = usePinStore((s) => s.unlockedThisSession)
@@ -442,8 +453,7 @@ export default function TradeScreen() {
                     // Fresh idempotency key per confirm-sheet-open. Any retry
                     // inside this sheet reuses the same key so PAC dedups.
                     idempotencyRef.current = makeIdempotencyKey()
-                    setOrderSheetOpen(false)
-                    setConfirmOpen(true)
+                    transitionModal(() => setOrderSheetOpen(false), () => setConfirmOpen(true))
                   }}
                   disabled={!canConfirm}
                 />
@@ -471,7 +481,8 @@ export default function TradeScreen() {
         onConfirm={() => {
           // Compliance gate: user must accept SEC-mandated legal terms per
           // trade, then verify their transaction PIN, before we hit PAC.
-          setLegalOpen(true)
+          // Close the confirm sheet first, then open legal (iOS one-modal rule).
+          transitionModal(() => setConfirmOpen(false), () => setLegalOpen(true))
         }}
       />
 
@@ -491,8 +502,9 @@ export default function TradeScreen() {
           toast.warn('Trade canceled', 'You must accept the trading terms to place an order.')
         }}
         onAccept={() => {
-          setLegalOpen(false)
-          setPinOpen(true)
+          // iOS: open the PIN modal only after the legal modal has dismissed,
+          // otherwise it silently fails to present and the buy stalls.
+          transitionModal(() => setLegalOpen(false), () => setPinOpen(true))
         }}
       />
 

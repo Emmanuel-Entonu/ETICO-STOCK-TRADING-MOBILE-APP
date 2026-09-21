@@ -125,6 +125,57 @@ export async function syncWalletFunding(): Promise<void> {
   }
 }
 
+// Move an amount from the user's Virtual Account (va_available) into their PAC
+// trading wallet. Server-authoritative: it reserves from va_available, fires the
+// cash_transactions DEPOSIT to PAC, and writes the va_ledger. Returns the new
+// va_available on success; throws with a readable message otherwise.
+export async function fundWalletFromVa(amountNaira: number): Promise<{ vaAvailable: number }> {
+  const res = await fetch(`${config.proxyBase}/api/fund-wallet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ amount: amountNaira }),
+  })
+  const raw = await parseJson(res) as { ok?: boolean; vaAvailable?: number; error?: string }
+  if (!res.ok || raw.ok !== true) {
+    throw new Error(String(raw.error ?? `Could not fund wallet (${res.status})`))
+  }
+  return { vaAvailable: Number(raw.vaAvailable ?? 0) }
+}
+
+// A single virtual-account transaction (money into/out of the user's Moneta VA).
+export interface VaTransaction {
+  id: string
+  reference: string
+  amount: number        // net amount that hit the VA (amount_settled)
+  amountGross: number   // gross amount paid before fee
+  fee: number
+  type: 'credit' | 'debit'
+  party: string         // merchant/narration, or a sensible default
+  status: 'success' | 'failed'
+  ts: number            // epoch ms
+}
+
+// Pull the user's VA transaction history (real bank deposits/debits) from
+// Moneta via the proxy. The proxy resolves the caller's OWN VA reference from
+// their JWT — the client never supplies it — so a user can only see their own.
+// Dates are optional (server defaults to the last 90 days).
+export async function getVaTransactions(opts?: { fromDate?: string; toDate?: string }): Promise<VaTransaction[]> {
+  const res = await fetch(`${config.proxyBase}/api/moneta-va`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({
+      action: 'transactions',
+      ...(opts?.fromDate ? { fromDate: opts.fromDate } : {}),
+      ...(opts?.toDate ? { toDate: opts.toDate } : {}),
+    }),
+  })
+  const raw = await parseJson(res) as { status?: boolean; data?: { transactions?: VaTransaction[] }; error?: string; message?: string }
+  if (!res.ok || raw.status !== true) {
+    throw new Error(String(raw.error ?? raw.message ?? `Could not load transactions (${res.status})`))
+  }
+  return raw.data?.transactions ?? []
+}
+
 // Returns the wallet balance in naira, or null if it could not be read.
 export async function getVirtualAccountBalance(reference: string): Promise<number | null> {
   const res = await fetch(`${config.proxyBase}/api/moneta-va`, {

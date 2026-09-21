@@ -258,6 +258,7 @@ export default function RootLayout() {
         <Stack.Screen name="receipt/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="orders" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="wallet" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="fund-wallet" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="watchlist" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
