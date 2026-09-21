@@ -73,11 +73,13 @@ grant execute on function public.set_pin(text) to authenticated;
 --   { ok: true }                                                    on success
 --   { ok: false, reason: 'no_pin' }                                 no PIN set
 --   { ok: false, reason: 'locked', locked_until: ts }               lockout active
---   { ok: false, reason: 'wrong',  locked_until: ts, attempts: n }  wrong PIN, now locked
+--   { ok: false, reason: 'wrong',  locked_until: ts|null, attempts: n } wrong PIN
 --
--- Escalation: each failed attempt = (attempts * 5) minute lockout.
--- Attempt 1 → 5min, 2 → 10min, 3 → 15min, ... indefinite escalation.
--- Counter resets only on a successful verify or on set_pin.
+-- Rate limit: the user gets 3 tries before any lockout. A lockout is applied
+-- only on every 3rd consecutive wrong attempt (attempts 3, 6, 9, …); attempts
+-- 1, 2, 4, 5, … return 'wrong' with locked_until = null (no lock, just wrong).
+-- Escalation: the Nth lockout lasts N * 3 minutes — 1st = 3min, 2nd = 6min,
+-- 3rd = 9min, … Counter resets only on a successful verify or on set_pin.
 create or replace function public.verify_pin(pin text)
 returns jsonb
 language plpgsql
@@ -117,7 +119,13 @@ begin
   end if;
 
   new_attempts := rec.failed_attempts + 1;
-  new_lock     := now() + (new_attempts * 5 || ' minutes')::interval;
+
+  -- Lock only on every 3rd wrong attempt; escalate 3 minutes per lockout.
+  if new_attempts % 3 = 0 then
+    new_lock := now() + ((new_attempts / 3) * 3 || ' minutes')::interval;
+  else
+    new_lock := null;   -- still within the current window of 3 tries
+  end if;
 
   update public.user_pins
     set failed_attempts = new_attempts,
@@ -128,7 +136,7 @@ begin
   return jsonb_build_object(
     'ok', false,
     'reason', 'wrong',
-    'locked_until', new_lock,
+    'locked_until', new_lock,          -- null unless this attempt triggered a lock
     'attempts', new_attempts
   );
 end;

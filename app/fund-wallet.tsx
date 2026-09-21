@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore'
 import { Text, Row, Button, Icon, toast } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
+import { TransactionPinModal } from '@/components/TransactionPinModal'
 
 // Dedicated "fund wallet" page (presented as a modal). The user picks an amount
 // to move from their Virtual Account into their PAC trading wallet. The app
@@ -28,23 +29,30 @@ export default function FundWalletScreen() {
   const [amount, setAmount] = useState('')
   const [phase, setPhase] = useState<Phase>('input')
   const [errMsg, setErrMsg] = useState<string | null>(null)
+  const [pinOpen, setPinOpen] = useState(false)
 
   const amt = Math.round(Number(amount) * 100) / 100
   const valid = Number.isFinite(amt) && amt >= 0.01 && amt <= vaAvailable
 
-  const submit = async () => {
+  // Validate, then gate the funding behind the transaction PIN — the same PIN
+  // that authorizes every trade. Moving money out of the VA requires it.
+  const onConfirm = () => {
     if (!valid) {
       setErrMsg(amt > vaAvailable ? `You only have ${naira(vaAvailable)} available.` : 'Enter an amount to send.')
       return
     }
     setErrMsg(null)
+    setPinOpen(true)
+  }
+
+  // Runs only after the PIN is verified. Waits for the PAC response, shows the
+  // success state, then auto-returns to the wallet. Masks any raw error.
+  const doFund = async () => {
+    setPinOpen(false)
     setPhase('submitting')
     try {
-      // Waits for the PAC (MyWealthCare) create + post to come back OK.
       await fundWalletFromVa(amt)
       setPhase('success')
-      // Show the success state briefly, then auto-return to the wallet with a
-      // reassurance that the balance updates on its own (PAC balance lags).
       setTimeout(() => {
         toast.success('On its way', 'Your wallet balance will update shortly — no need to refresh.')
         router.back()
@@ -117,7 +125,7 @@ export default function FundWalletScreen() {
             <View style={{ flex: 1 }} />
             <Button
               title={phase === 'submitting' ? 'Sending…' : 'Confirm'}
-              onPress={submit}
+              onPress={onConfirm}
               loading={phase === 'submitting'}
               disabled={phase === 'submitting' || !valid}
             />
@@ -125,6 +133,16 @@ export default function FundWalletScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Transaction PIN gate — same as trades. */}
+      <TransactionPinModal
+        visible={pinOpen}
+        submitting={phase === 'submitting'}
+        title="Confirm funding"
+        subtitle={`Enter your PIN to move ${naira(amt)} to your wallet`}
+        onVerified={doFund}
+        onCancel={() => setPinOpen(false)}
+      />
     </SafeAreaView>
   )
 }

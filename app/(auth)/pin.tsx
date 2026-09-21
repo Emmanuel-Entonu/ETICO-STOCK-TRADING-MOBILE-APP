@@ -45,11 +45,22 @@ export default function PinScreen() {
   const isLocked = !!lockedUntil && lockedUntil.getTime() > now
   const remainingMs = isLocked ? lockedUntil!.getTime() - now : 0
 
+  // Tick while a lockout is set so the countdown updates and we can detect the
+  // moment it hits zero.
   useEffect(() => {
-    if (!isLocked) return
+    if (!lockedUntil) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [isLocked])
+  }, [lockedUntil])
+
+  // When the lockout expires, clear the lock + error so the "Locked · try again"
+  // message and the red dots disappear instead of lingering after the timer ends.
+  useEffect(() => {
+    if (lockedUntil && lockedUntil.getTime() <= now) {
+      setLockedUntil(null)
+      setError(null)
+    }
+  }, [now, lockedUntil])
 
   useEffect(() => {
     setPinValue('')
@@ -111,9 +122,12 @@ export default function PinScreen() {
       } else if (r.reason === 'no_pin') {
         router.replace('/(auth)/pin?mode=create')
       } else if (r.reason === 'locked') {
-        handleWrong('Too many tries. Wait it out.', r.lockedUntil)
+        handleWrong('', r.lockedUntil)          // countdown shows; clears when it ends
+      } else if (r.lockedUntil) {
+        handleWrong('', r.lockedUntil)          // this wrong attempt tripped a lockout
       } else {
-        handleWrong('Wrong PIN.', r.lockedUntil)
+        const left = 3 - (r.attempts % 3)
+        handleWrong(left > 0 ? `Wrong PIN. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Wrong PIN.')
       }
     } catch (e) {
       handleWrong((e as Error).message)

@@ -4,7 +4,9 @@ export type VerifyPinResult =
   | { ok: true }
   | { ok: false; reason: 'no_pin' }
   | { ok: false; reason: 'locked'; lockedUntil: Date }
-  | { ok: false; reason: 'wrong';  lockedUntil: Date; attempts: number }
+  // `lockedUntil` is null when the wrong attempt did NOT trigger a lockout
+  // (the user still has tries left in the current window of 3).
+  | { ok: false; reason: 'wrong';  lockedUntil: Date | null; attempts: number }
 
 export async function setPin(pin: string): Promise<void> {
   if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits')
@@ -20,7 +22,12 @@ export async function verifyPin(pin: string): Promise<VerifyPinResult> {
   if (r.ok) return { ok: true }
   if (r.reason === 'no_pin') return { ok: false, reason: 'no_pin' }
   if (r.reason === 'locked') return { ok: false, reason: 'locked', lockedUntil: new Date(r.locked_until!) }
-  return { ok: false, reason: 'wrong', lockedUntil: new Date(r.locked_until!), attempts: r.attempts ?? 0 }
+  return {
+    ok: false,
+    reason: 'wrong',
+    lockedUntil: r.locked_until ? new Date(r.locked_until) : null,
+    attempts: r.attempts ?? 0,
+  }
 }
 
 // Password re-auth reset. Client verifies the password via
