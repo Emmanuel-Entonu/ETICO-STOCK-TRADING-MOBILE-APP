@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView, Modal,
+  View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView, Modal, Image,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { MotiView } from 'moti'
+import { CameraView, useCameraPermissions } from 'expo-camera'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { initiateBvn, confirmBvnOtp, type BvnProfile } from '@/lib/nibssApi'
 import { createBrokerAccount } from '@/lib/pacApi'
+import { uploadKycSelfie } from '@/lib/kycUpload'
 import {
   validateBvn, validateOtp, validateFullName, validateDob,
   validateAddress, validateNigerianPhone, validateIdNumber,
@@ -18,7 +20,7 @@ import { colors, spacing, radii } from '@/theme'
 import { NG_BANKS } from '@/lib/banks'
 import { resolveAccountName } from '@/lib/bankApi'
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 
 const ID_TYPES = [
   { value: 'National ID (NIN)',      label: 'National ID (NIN)' },
@@ -30,7 +32,8 @@ const ID_TYPES = [
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
   2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
-  3: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we create your account.' },
+  3: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we take your photo.' },
+  4: { title: 'Take a selfie',          subtitle: 'A quick photo to confirm it’s really you. Look at the camera.' },
 }
 
 // Auto-insert the dashes in a YYYY-MM-DD date as the user types digits (#15),
@@ -92,6 +95,12 @@ export default function KycScreen() {
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // Step 4 — selfie
+  const [selfieUri, setSelfieUri] = useState<string | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [camPermission, requestCamPermission] = useCameraPermissions()
+  const cameraRef = useRef<CameraView>(null)
+
   // Per-field validation errors so skipping BVN (or any invalid personal /
   // settlement field) shows exactly what's wrong instead of a silently
   // disabled Continue button (#16).
@@ -107,6 +116,15 @@ export default function KycScreen() {
     if (meta.full_name) setFullName(prev => prev || meta.full_name!)
     if (meta.phone) setPhone(prev => prev || meta.phone!)
   }, [user])
+
+  // Ask for camera permission the moment the user reaches the selfie step, so the
+  // live camera appears without an extra tap (falls back to the Allow button if
+  // the OS prompt was previously dismissed).
+  useEffect(() => {
+    if (step === 4 && camPermission && !camPermission.granted && camPermission.canAskAgain) {
+      requestCamPermission()
+    }
+  }, [step, camPermission, requestCamPermission])
 
   // Name-enquiry (#18): once a bank is picked and the NUBAN is 10 digits, resolve
   // the account holder's name via the NIBSS debit-instruction enquiry and lock
@@ -213,6 +231,21 @@ export default function KycScreen() {
     return Object.keys(errs).length === 0
   }
 
+  const captureSelfie = async () => {
+    if (!cameraRef.current || capturing) return
+    setCapturing(true)
+    setSubmitError(null)
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.55 })
+      if (photo?.uri) setSelfieUri(photo.uri)
+    } catch {
+      setSubmitError('Could not take the photo. Try again.')
+    } finally {
+      setCapturing(false)
+    }
+  }
+  const retakeSelfie = () => { setSelfieUri(null); setSubmitError(null) }
+
   async function submit() {
     if (!user) return
     const name    = validateFullName(fullName)
@@ -234,8 +267,20 @@ export default function KycScreen() {
     if (!/^\d{10}$/.test(acctNo))                     { setSubmitError('Settlement account number must be 10 digits'); return }
     if (bank.length < 2 || bank.length > 80)          { setSubmitError('Enter your settlement bank'); return }
 
+    if (!selfieUri) { setSubmitError('Take a verification selfie to continue'); setStep(4); return }
+
     setSaving(true); setSubmitError(null)
     try {
+      // Upload the KYC selfie to Storage first; its path is saved on the profile
+      // and shown on the partner dashboard. A failure here blocks submission so
+      // we never create a broker account without the verification photo.
+      let selfiePath: string
+      try {
+        selfiePath = await uploadKycSelfie(selfieUri, user.id)
+      } catch {
+        throw new Error('Could not upload your selfie. Check your connection and retake it.')
+      }
+
       // BVN-derived identity is written ONLY when this run actually captured it
       // (OTP-verified). Otherwise we omit those columns so a redo that skips BVN
       // (e.g. fixing only the settlement account) doesn't null out previously
@@ -264,6 +309,8 @@ export default function KycScreen() {
         id_type: idType,
         id_number: idNumV.value,
         kyc_status: 'submitted',
+        // Verification selfie (Storage path) — shown on the partner dashboard.
+        selfie_path: selfiePath,
         // Settlement (bank) account — reviewed on the PAC partner dashboard.
         settlement_account_name:   acctName,
         settlement_account_number: acctNo,
@@ -319,7 +366,9 @@ export default function KycScreen() {
   const cta =
     step === 1 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep1()) setStep(2) } }
     : step === 2 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep2()) setStep(3) } }
-    : { label: saving ? 'Submitting…' : 'Submit KYC', disabled: saving, loading: saving, onPress: submit }
+    : step === 3 ? { label: 'Continue', disabled: false, loading: false, onPress: () => setStep(4) }
+    // Step 4 (selfie): can't submit until a photo is taken.
+    : { label: saving ? 'Submitting…' : 'Submit KYC', disabled: saving || !selfieUri, loading: saving, onPress: submit }
 
   const meta = STEP_META[step]
 
@@ -334,12 +383,12 @@ export default function KycScreen() {
                 <Icon name="solar:arrow-left-linear" size={20} color={colors.text} />
               </Pressable>
             ) : <View style={{ width: 40 }} />}
-            <Text variant="eyebrow" tone="muted">STEP {step} / 3</Text>
+            <Text variant="eyebrow" tone="muted">STEP {step} / 4</Text>
             <View style={{ width: 40 }} />
           </View>
 
           <View style={{ flexDirection: 'row', gap: 6, marginTop: spacing.md }}>
-            {[1, 2, 3].map(n => (
+            {[1, 2, 3, 4].map(n => (
               <MotiView
                 key={n}
                 animate={{ backgroundColor: n <= step ? (n === step ? colors.accent : colors.brand) : colors.border }}
@@ -581,13 +630,56 @@ export default function KycScreen() {
                 </View>
 
                 <View style={styles.uploadNote()}>
-                  <Icon name="solar:cloud-upload-linear" size={18} color={colors.textMuted} />
+                  <Icon name="solar:camera-linear" size={18} color={colors.textMuted} />
                   <Text variant="small" tone="muted" style={{ flex: 1 }}>
-                    Document photo upload is coming soon. For now we submit these details and create your brokerage account.
+                    Next, we’ll take a quick verification selfie, then create your brokerage account.
                   </Text>
                 </View>
 
                 {submitError && <Text variant="small" tone="negative" style={{ marginTop: spacing.lg }}>{submitError}</Text>}
+              </View>
+            )}
+
+            {/* ───────────────────────── STEP 4 — selfie ───────────────────────── */}
+            {step === 4 && (
+              <View style={{ alignItems: 'center' }}>
+                <View style={styles.selfieFrame()}>
+                  {selfieUri ? (
+                    <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
+                  ) : camPermission?.granted ? (
+                    <CameraView ref={cameraRef} style={styles.selfieImage} facing="front" />
+                  ) : (
+                    <View style={styles.selfiePermission()}>
+                      <Icon name="solar:camera-bold" size={40} color={colors.textMuted} />
+                      <Text variant="small" tone="muted" align="center" style={{ marginTop: spacing.md, paddingHorizontal: spacing.xl }}>
+                        {camPermission && !camPermission.canAskAgain
+                          ? 'Camera access is off. Enable it in Settings, then come back.'
+                          : 'We need your camera to take a verification selfie.'}
+                      </Text>
+                      <View style={{ height: spacing.lg }} />
+                      <Button title="Allow camera" size="sm" fullWidth={false} onPress={() => requestCamPermission()} />
+                    </View>
+                  )}
+                </View>
+
+                <Text variant="small" tone="muted" align="center" style={{ marginTop: spacing.xl, paddingHorizontal: spacing.lg }}>
+                  Center your face, good lighting, no hat or glasses. This photo is only used to verify your identity.
+                </Text>
+
+                <View style={{ height: spacing.xl }} />
+
+                {selfieUri ? (
+                  <Pressable onPress={retakeSelfie} hitSlop={8} style={styles.retakeBtn()}>
+                    <Icon name="solar:refresh-linear" size={18} color={colors.text} />
+                    <Text variant="smallStrong">Retake photo</Text>
+                  </Pressable>
+                ) : camPermission?.granted ? (
+                  <Pressable onPress={captureSelfie} disabled={capturing} style={styles.shutterOuter()}>
+                    <View style={[styles.shutterInner(), capturing && { opacity: 0.5 }]} />
+                  </Pressable>
+                ) : null}
+
+                {submitError && <Text variant="small" tone="negative" align="center" style={{ marginTop: spacing.lg }}>{submitError}</Text>}
               </View>
             )}
           </MotiView>
@@ -771,5 +863,30 @@ const styles = {
     paddingHorizontal: spacing.xl, paddingTop: spacing.lg,
     borderTopWidth: 1, borderTopColor: colors.border,
     backgroundColor: colors.bg,
+  }),
+  selfieFrame: () => ({
+    width: 260, height: 320, borderRadius: 24, overflow: 'hidden' as const,
+    backgroundColor: colors.bgMuted,
+    borderWidth: 2, borderColor: colors.border,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+  }),
+  selfieImage: { width: '100%' as const, height: '100%' as const },
+  selfiePermission: () => ({
+    flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const,
+    paddingHorizontal: spacing.lg,
+  }),
+  retakeBtn: () => ({
+    flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
+    gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
+    borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.bgSubtle,
+  }),
+  shutterOuter: () => ({
+    width: 74, height: 74, borderRadius: 37,
+    borderWidth: 4, borderColor: colors.brand,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+  }),
+  shutterInner: () => ({
+    width: 58, height: 58, borderRadius: 29, backgroundColor: colors.brand,
   }),
 }

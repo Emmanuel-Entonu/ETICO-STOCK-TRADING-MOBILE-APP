@@ -42,6 +42,13 @@
           }
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ETICO uses your camera to take a verification selfie for KYC.",
+          "recordAudioAndroid": false
+        }
+      ],
       "./plugins/withEticoNative"
     ],
     "experiments": {
