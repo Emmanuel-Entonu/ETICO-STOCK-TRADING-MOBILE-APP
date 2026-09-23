@@ -59,6 +59,26 @@ export default function HomeScreen() {
   useEffect(() => { if (tab === 'orders' && pacAccountId) loadOrders(pacAccountId) }, [tab, pacAccountId])
   useEffect(() => { syncNotifs(pacOrders, { kycStatus, cacsStatus, cacsRejectionReason }) }, [pacOrders, kycStatus, cacsStatus, cacsRejectionReason, syncNotifs])
 
+  // First filled BUY date per stock, for "Since …" on holdings (PAC positions
+  // don't carry a purchase date). listOrders returns the latest 100, so with a
+  // full page older buys may be missing — show nothing rather than a wrong date.
+  const firstBuyDate = useMemo(() => {
+    const out: Record<string, string> = {}
+    if (pacOrders.length >= 100) return out
+    const earliest: Record<string, number> = {}
+    for (const o of pacOrders) {
+      if (o.side !== 'BUY' || !(o.filledQty > 0 || o.orderStatus === 'FILLED')) continue
+      const t = Date.parse(o.createdAt)
+      if (!Number.isFinite(t)) continue
+      const k = o.secId.toUpperCase()
+      if (earliest[k] === undefined || t < earliest[k]) earliest[k] = t
+    }
+    for (const [k, t] of Object.entries(earliest)) {
+      out[k] = new Date(t).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+    return out
+  }, [pacOrders])
+
   const totalMarketValue = positions.reduce((s, p) => s + p.marketValue, 0)
   const totalCost = positions.reduce((s, p) => s + p.averageCost * p.quantity, 0)
   const totalPnL  = positions.reduce((s, p) => s + p.unrealizedPnL, 0)
@@ -305,6 +325,7 @@ export default function HomeScreen() {
                   <HoldingRow
                     key={p.symbol}
                     symbol={p.symbol}
+                    since={firstBuyDate[p.symbol.toUpperCase()]}
                     quantity={p.quantity}
                     averageCost={p.averageCost}
                     marketValue={p.marketValue}
@@ -395,9 +416,11 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
 }
 
 const HoldingRow = memo(function HoldingRow({
-  symbol, quantity, averageCost, marketValue, pnl, pnlPct, onPress,
+  symbol, since, quantity, averageCost, marketValue, pnl, pnlPct, onPress,
 }: {
   symbol: string
+  /** First filled BUY of this stock, e.g. "12 Sep 2026" (omitted when unknown). */
+  since?: string
   quantity: number
   averageCost: number
   marketValue: number
@@ -432,6 +455,7 @@ const HoldingRow = memo(function HoldingRow({
           <Text variant="small" tone="muted" numberOfLines={1}>
             {quantity.toLocaleString()} shares · avg {naira(averageCost)}
           </Text>
+          {since ? <Text variant="small" tone="subtle" numberOfLines={1}>Since {since}</Text> : null}
         </View>
         <View style={{ marginRight: spacing.md, width: 72, height: 32, overflow: 'hidden' }}>
           <LineChart

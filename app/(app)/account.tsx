@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, ScrollView, Pressable, Modal } from 'react-native'
+import { View, ScrollView, Pressable, Modal, Linking } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MotiView } from 'moti'
@@ -17,6 +17,18 @@ export default function AccountScreen() {
   const [confirmOut, setConfirmOut] = useState(false)
 
   const email = user?.email ?? '—'
+
+  // Honest status badges (issue log: "KYC verified / brokerage linked although
+  // not"). kyc_status flips to 'verified' as soon as KYC is SUBMITTED and a PAC
+  // account id exists before PAC has approved it — the account isn't usable until
+  // PAC approves the CSCS, so only that makes identity/brokerage green.
+  const identityStatus =
+    cacsStatus === 'approved' ? 'verified'
+    : cacsStatus === 'rejected' ? 'rejected'
+    : kycStatus === 'verified' || kycStatus === 'submitted' ? 'in_review'
+    : 'not_started'
+  const brokerageStatus = !pacAccountId ? 'not_linked' : cacsStatus === 'approved' ? 'linked' : 'pending'
+  const cscsStatus = cacsStatus === 'pending' ? 'in_review' : cacsStatus
   const fullName = (user?.user_metadata?.full_name as string | undefined) ?? ''
   const firstName = fullName.split(' ')[0] || user?.email?.split('@')[0] || '?'
   const displayName = fullName || firstName
@@ -54,37 +66,38 @@ export default function AccountScreen() {
             <StatusRow
               icon="solar:shield-check-bold"
               label="KYC Identity"
-              status={kycStatus}
+              status={identityStatus}
             />
             <Divider my="xs" />
             <StatusRow
               icon="solar:document-text-bold"
               label="NGX / CSCS"
-              status={cacsStatus}
+              status={cscsStatus}
             />
             <Divider my="xs" />
             <StatusRow
               icon="solar:card-2-bold"
               label="Brokerage account"
-              status={pacAccountId ? 'linked' : 'not_linked'}
+              status={brokerageStatus}
             />
           </Card>
         </View>
 
-        {/* Preferences (placeholder rows for future settings) */}
+        {/* Preferences */}
         <SectionHeader label="PREFERENCES" />
         <View style={{ paddingHorizontal: spacing.xl }}>
           <Card padded={false}>
             <MenuRow
               icon="solar:bell-linear"
               label="Notifications"
-              onPress={() => toast.info('Coming soon', 'Notification preferences will land in the next update.')}
+              // Per-app notification switches live in the OS settings for ETICO.
+              onPress={() => { Linking.openSettings().catch(() => toast.error('Could not open settings', 'Open your phone Settings → Apps → ETICO → Notifications.')) }}
             />
             <Divider my="xs" />
             <MenuRow
               icon="solar:lock-password-linear"
-              label="Security"
-              onPress={() => toast.info('Coming soon', 'Change password and biometric login coming next.')}
+              label="Change password"
+              onPress={() => router.push({ pathname: '/(auth)/reset', params: user?.email ? { email: user.email } : {} } as never)}
             />
             <Divider my="xs" />
             <MenuRow
@@ -246,8 +259,13 @@ function statusStyle(status: string): { label: string; bg: string; fg: string } 
     case 'pending':
     case 'submitted':
       return { label: status.toUpperCase(), bg: colors.warningSubtle, fg: colors.warning }
+    case 'in_review':
+      return { label: 'UNDER REVIEW', bg: colors.warningSubtle, fg: colors.warning }
     case 'not_linked':
       return { label: 'NOT LINKED', bg: colors.bgSubtle, fg: colors.textMuted }
+    case 'not_started':
+    case 'not_submitted':
+      return { label: 'NOT STARTED', bg: colors.bgSubtle, fg: colors.textMuted }
     default:
       return { label: status.toUpperCase().replace(/_/g, ' '), bg: colors.bgSubtle, fg: colors.textMuted }
   }

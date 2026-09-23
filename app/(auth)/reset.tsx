@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useLocalSearchParams } from 'expo-router'
 import { MotiView } from 'moti'
 import { supabase } from '@/lib/supabase'
 import { validateEmail, validatePassword } from '@/lib/validation'
@@ -19,7 +19,9 @@ export default function ResetScreen() {
   const insets = useSafeAreaInsets()
   const [stage, setStage] = useState<Stage>(1)
 
-  const [email, setEmail] = useState('')
+  // Prefilled when opened from Account → Change password.
+  const params = useLocalSearchParams<{ email?: string }>()
+  const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -88,7 +90,7 @@ export default function ResetScreen() {
         <View style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 40 }}>
             <Pressable
-              onPress={() => (stage === 2 ? (setStage(1), setError(null)) : router.replace('/(auth)/login'))}
+              onPress={() => (stage === 2 ? (setStage(1), setError(null)) : router.canGoBack() ? router.back() : router.replace('/(auth)/login'))}
               hitSlop={12}
               style={styles.backBtn()}
             >
