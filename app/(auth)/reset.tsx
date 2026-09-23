@@ -57,10 +57,15 @@ export default function ResetScreen() {
     setLoading(true); setError(null)
     try {
       await resetPasswordWithOtp(em.value, code, pw.value)
-      // Sign the user straight in with the new password; AuthGate takes it from here.
+      // Sign the user straight in with the new password.
       const { error: signErr } = await supabase.auth.signInWithPassword({ email: em.value, password: pw.value })
       if (signErr) { router.replace('/(auth)/login'); return }
-      // AuthGate redirects on the session change; nothing else to do.
+      // Leave the reset route explicitly. AuthGate deliberately ignores `reset`
+      // (so a signed-in user can open it from Support), and TransitionSplash
+      // covers the screen while signed-in + PIN-locked + not on the PIN route —
+      // so staying here deadlocks behind the loader. Index routes to PIN
+      // create/enter or home once the profile loads.
+      router.replace('/')
     } catch (e) {
       setError((e as Error).message)
     } finally {
