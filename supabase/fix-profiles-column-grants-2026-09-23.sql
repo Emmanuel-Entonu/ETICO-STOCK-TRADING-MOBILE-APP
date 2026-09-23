@@ -44,7 +44,9 @@ begin
   where table_schema = 'public' and table_name = 'profiles'
     and column_name not in (
       'wallet_balance','va_reference','va_number','va_bank',
-      'va_account_name','va_last_balance'
+      'va_account_name','va_last_balance',
+      -- added 2026-09-23: later money/identity columns (see URGENT-revoke-va-available-*.sql)
+      'va_available','has_pin','partner_ref','partner_email'
     );
   execute format('grant update (%s) on public.profiles to authenticated', cols);
 end $$;
