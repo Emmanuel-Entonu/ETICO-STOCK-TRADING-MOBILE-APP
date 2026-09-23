@@ -126,6 +126,38 @@ export default function KycScreen() {
     if (meta.phone) setPhone(prev => prev || meta.phone!)
   }, [user])
 
+  // KYC redo (e.g. after a CSCS rejection): prefill everything already on file so
+  // the user only fixes what was wrong instead of retyping the whole form (web
+  // does the same). Only fills empties — a fresh BVN pull or the user's own edits
+  // always win. BVN itself is never prefilled (it must be re-verified by OTP).
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    supabase.from('profiles')
+      .select('full_name, date_of_birth, address, phone, id_type, id_number, settlement_bank_name, settlement_account_number, settlement_account_name, next_of_kin_name, next_of_kin_phone, mother_maiden_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data: p }) => {
+        if (cancelled || !p) return
+        const fill = (set: (fn: (prev: string) => string) => void, v: string | null | undefined) => { if (v) set(prev => prev || v) }
+        fill(setFullName, p.full_name)
+        fill(setDob, p.date_of_birth)
+        fill(setAddress, p.address)
+        fill(setPhone, p.phone)
+        fill(setIdNumber, p.id_number)
+        const savedType = ID_TYPES.find(t => t.value === p.id_type)?.value
+        if (savedType && p.id_number) setIdType(savedType)
+        const bank = NG_BANKS.find(b => b.name === p.settlement_bank_name)
+        if (bank) { setBankName(prev => prev || bank.name); setBankCode(prev => prev || bank.bankCode) }
+        fill(setAccountNumber, p.settlement_account_number)
+        fill(setAccountName, p.settlement_account_name)
+        fill(setNextOfKinName, p.next_of_kin_name)
+        fill(setNextOfKinPhone, p.next_of_kin_phone)
+        fill(setMotherMaidenName, p.mother_maiden_name)
+      })
+    return () => { cancelled = true }
+  }, [user])
+
   // Ask for camera permission the moment the user reaches the selfie step, so the
   // live camera appears without an extra tap (falls back to the Allow button if
   // the OS prompt was previously dismissed).
