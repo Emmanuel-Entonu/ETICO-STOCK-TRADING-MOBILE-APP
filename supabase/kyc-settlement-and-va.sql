@@ -88,8 +88,14 @@ alter table public.profiles enable row level security;
 
 -- A blanket table-level UPDATE grant OVERRIDES column-level REVOKEs, so we must
 -- revoke UPDATE on the whole table and grant it back on every column EXCEPT the
--- money/VA ones. The DO block enumerates the current columns so it stays correct
--- as the schema evolves. anon gets no UPDATE at all.
+-- money/VA ones. The DO block enumerates the columns AS THEY EXIST WHEN IT RUNS.
+-- anon gets no UPDATE at all.
+--
+--   ⚠️  `alter table ... add column` does NOT auto-grant. After adding ANY new
+--       profiles column that the client must write, RE-RUN this block (or
+--       supabase/fix-profiles-column-grants-*.sql), or the client UPDATE/upsert
+--       that touches it fails with `42501 permission denied for table profiles`.
+--       (This is exactly what broke KYC when selfie_path + next_of_kin_* were added.)
 revoke update on public.profiles from authenticated, anon;
 
 do $$
