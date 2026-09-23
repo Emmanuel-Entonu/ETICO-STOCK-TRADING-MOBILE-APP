@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 // Finalize KYC through the web app's shared server path (Niqra-web
 // POST /api/kyc/finalize) so mobile and web behave identically: a service-role
 // write of pac_account_id / kyc_status='verified' / cacs_status='pending', then
-// the branded KYC PDF (with the user's identifier email user+<ref>@etico.com and
+// the branded KYC PDF (with the user's identifier email user+<ref>@etico.ng and
 // verification selfie) is emailed to PAC server-side.
 //
 // Falls back to the legacy client-side write if the web route is unreachable
