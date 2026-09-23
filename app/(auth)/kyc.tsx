@@ -109,6 +109,10 @@ export default function KycScreen() {
   const [capturing, setCapturing] = useState(false)
   const [camPermission, requestCamPermission, getCamPermission] = useCameraPermissions()
   const cameraRef = useRef<CameraView>(null)
+  // The preview must be running before takePictureAsync — tapping the shutter
+  // in the first moment (or right after Retake remounts the camera) threw
+  // "camera is not running" on Android. Shutter stays dimmed until ready.
+  const [camReady, setCamReady] = useState(false)
 
   // Per-field validation errors so skipping BVN (or any invalid personal /
   // settlement field) shows exactly what's wrong instead of a silently
@@ -166,7 +170,7 @@ export default function KycScreen() {
   // dialog in a loop. After that the user drives it with the Allow button.
   const camAutoAsked = useRef(false)
   useEffect(() => {
-    if (step !== 5) { camAutoAsked.current = false; return }
+    if (step !== 5) { camAutoAsked.current = false; setCamReady(false); return }
     if (camAutoAsked.current) return
     if (camPermission && !camPermission.granted && camPermission.canAskAgain) {
       camAutoAsked.current = true
@@ -302,19 +306,19 @@ export default function KycScreen() {
   }
 
   const captureSelfie = async () => {
-    if (!cameraRef.current || capturing) return
+    if (!cameraRef.current || capturing || !camReady) return
     setCapturing(true)
     setSubmitError(null)
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.55 })
-      if (photo?.uri) setSelfieUri(photo.uri)
+      if (photo?.uri) { setSelfieUri(photo.uri); setCamReady(false) }
     } catch {
       setSubmitError('Could not take the photo. Try again.')
     } finally {
       setCapturing(false)
     }
   }
-  const retakeSelfie = () => { setSelfieUri(null); setSubmitError(null) }
+  const retakeSelfie = () => { setCamReady(false); setSelfieUri(null); setSubmitError(null) }
 
   async function submit() {
     if (!user) return
@@ -754,7 +758,13 @@ export default function KycScreen() {
                   {selfieUri ? (
                     <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
                   ) : camPermission?.granted ? (
-                    <CameraView ref={cameraRef} style={styles.selfieImage} facing="front" />
+                    <CameraView
+                      ref={cameraRef}
+                      style={styles.selfieImage}
+                      facing="front"
+                      onCameraReady={() => setCamReady(true)}
+                      onMountError={() => { setCamReady(false); setSubmitError('Could not start the camera. Close other apps using it and try again.') }}
+                    />
                   ) : (
                     <View style={styles.selfiePermission()}>
                       <Icon name="solar:camera-bold" size={40} color={colors.textMuted} />
@@ -781,7 +791,7 @@ export default function KycScreen() {
                     <Text variant="smallStrong">Retake photo</Text>
                   </Pressable>
                 ) : camPermission?.granted ? (
-                  <Pressable onPress={captureSelfie} disabled={capturing} style={styles.shutterOuter()}>
+                  <Pressable onPress={captureSelfie} disabled={capturing || !camReady} accessibilityRole="button" accessibilityLabel="Take selfie" style={[styles.shutterOuter(), !camReady && { opacity: 0.4 }]}>
                     <View style={[styles.shutterInner(), capturing && { opacity: 0.5 }]} />
                   </Pressable>
                 ) : null}
