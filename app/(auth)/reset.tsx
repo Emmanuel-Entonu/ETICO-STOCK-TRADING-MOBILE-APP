@@ -60,6 +60,10 @@ export default function ResetScreen() {
       // Sign the user straight in with the new password.
       const { error: signErr } = await supabase.auth.signInWithPassword({ email: em.value, password: pw.value })
       if (signErr) { router.replace('/(auth)/login'); return }
+      // A reset is often done because the account may be compromised: end every
+      // OTHER session (other phones / web) so the old password's logins stop
+      // working. Keeps this device signed in. Best-effort — never blocks.
+      supabase.auth.signOut({ scope: 'others' }).catch(() => {})
       // Leave the reset route explicitly. AuthGate deliberately ignores `reset`
       // (so a signed-in user can open it from Support), and TransitionSplash
       // covers the screen while signed-in + PIN-locked + not on the PIN route —

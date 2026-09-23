@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   View, KeyboardAvoidingView, Platform, Pressable, TextInput, ScrollView, Modal, Image,
+  AppState, Linking,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -11,6 +12,7 @@ import { useAuthStore } from '@/store/authStore'
 import { initiateBvn, confirmBvnOtp, type BvnProfile } from '@/lib/nibssApi'
 import { createBrokerAccount } from '@/lib/pacApi'
 import { uploadKycSelfie } from '@/lib/kycUpload'
+import { finalizeKyc } from '@/lib/kycFinalize'
 import {
   validateBvn, validateOtp, validateFullName, validateDob,
   validateAddress, validateNigerianPhone, validateIdNumber,
@@ -104,7 +106,7 @@ export default function KycScreen() {
   // Step 5 — selfie
   const [selfieUri, setSelfieUri] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
-  const [camPermission, requestCamPermission] = useCameraPermissions()
+  const [camPermission, requestCamPermission, getCamPermission] = useCameraPermissions()
   const cameraRef = useRef<CameraView>(null)
 
   // Per-field validation errors so skipping BVN (or any invalid personal /
@@ -126,11 +128,31 @@ export default function KycScreen() {
   // Ask for camera permission the moment the user reaches the selfie step, so the
   // live camera appears without an extra tap (falls back to the Allow button if
   // the OS prompt was previously dismissed).
+  // Auto-asks ONCE per visit to the step: on Android a first "Deny" leaves
+  // canAskAgain=true, so re-asking on every permission change would re-pop the
+  // dialog in a loop. After that the user drives it with the Allow button.
+  const camAutoAsked = useRef(false)
   useEffect(() => {
-    if (step === 5 && camPermission && !camPermission.granted && camPermission.canAskAgain) {
+    if (step !== 5) { camAutoAsked.current = false; return }
+    if (camAutoAsked.current) return
+    if (camPermission && !camPermission.granted && camPermission.canAskAgain) {
+      camAutoAsked.current = true
       requestCamPermission()
     }
   }, [step, camPermission, requestCamPermission])
+
+  // Re-read the permission when the user comes back from Settings, so enabling
+  // the camera there takes effect immediately instead of leaving a dead prompt.
+  useEffect(() => {
+    if (step !== 5) return
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') getCamPermission() })
+    return () => sub.remove()
+  }, [step, getCamPermission])
+
+  // Once the OS has permanently blocked the camera, request() is a silent no-op —
+  // the only way forward is the system Settings page.
+  const cameraBlocked = !!camPermission && !camPermission.granted && !camPermission.canAskAgain
+  const onAllowCamera = () => { if (cameraBlocked) Linking.openSettings(); else requestCamPermission() }
 
   // Name-enquiry (#18): once a bank is picked and the NUBAN is 10 digits, resolve
   // the account holder's name via the NIBSS debit-instruction enquiry and lock
@@ -357,10 +379,9 @@ export default function KycScreen() {
       // dashboard. Mark it 'pending' so the app shows "CSCS under review" until
       // the reviewer flips it to 'approved' (which unlocks trading) or
       // 'rejected'. A redo re-runs this whole flow → back to 'pending'.
-      const { error: updateErr } = await supabase.from('profiles')
-        .update({ pac_account_id: pacAccountId, kyc_status: 'verified', cacs_status: 'pending', cacs_rejection_reason: null })
-        .eq('id', user.id)
-      if (updateErr) throw new Error(updateErr.message)
+      // Goes through the web's shared finalize route, which also emails the
+      // KYC PDF to PAC (same as a web signup).
+      await finalizeKyc(user.id, pacAccountId)
 
       await loadProfile()
 
@@ -705,12 +726,12 @@ export default function KycScreen() {
                     <View style={styles.selfiePermission()}>
                       <Icon name="solar:camera-bold" size={40} color={colors.textMuted} />
                       <Text variant="small" tone="muted" align="center" style={{ marginTop: spacing.md, paddingHorizontal: spacing.xl }}>
-                        {camPermission && !camPermission.canAskAgain
-                          ? 'Camera access is off. Enable it in Settings, then come back.'
+                        {cameraBlocked
+                          ? 'Camera access is off for ETICO. Turn it on in Settings, then come back.'
                           : 'We need your camera to take a verification selfie.'}
                       </Text>
                       <View style={{ height: spacing.lg }} />
-                      <Button title="Allow camera" size="sm" fullWidth={false} onPress={() => requestCamPermission()} />
+                      <Button title={cameraBlocked ? 'Open Settings' : 'Allow camera'} size="sm" fullWidth={false} onPress={onAllowCamera} />
                     </View>
                   )}
                 </View>
