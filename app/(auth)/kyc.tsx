@@ -20,7 +20,7 @@ import { colors, spacing, radii } from '@/theme'
 import { NG_BANKS } from '@/lib/banks'
 import { resolveAccountName } from '@/lib/bankApi'
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3 | 4 | 5
 
 const ID_TYPES = [
   { value: 'National ID (NIN)',      label: 'National ID (NIN)' },
@@ -32,8 +32,9 @@ const ID_TYPES = [
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
   2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
-  3: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we take your photo.' },
-  4: { title: 'Take a selfie',          subtitle: 'A quick photo to confirm it’s really you. Look at the camera.' },
+  3: { title: 'Next of kin',            subtitle: 'A contact and your mother’s maiden name — required by the exchange.' },
+  4: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we take your photo.' },
+  5: { title: 'Take a selfie',          subtitle: 'A quick photo to confirm it’s really you. Look at the camera.' },
 }
 
 // Auto-insert the dashes in a YYYY-MM-DD date as the user types digits (#15),
@@ -91,11 +92,16 @@ export default function KycScreen() {
   // enquiry unavailable/failed, so the user types the name themselves.
   const [nameStatus, setNameStatus] = useState<'idle' | 'resolving' | 'resolved' | 'manual'>('idle')
 
-  // Step 3
+  // Step 3 — next of kin + mother's maiden name (required on the PAC form)
+  const [nextOfKinName, setNextOfKinName] = useState('')
+  const [nextOfKinPhone, setNextOfKinPhone] = useState('')
+  const [motherMaidenName, setMotherMaidenName] = useState('')
+
+  // Step 4 — review / submit
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Step 4 — selfie
+  // Step 5 — selfie
   const [selfieUri, setSelfieUri] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [camPermission, requestCamPermission] = useCameraPermissions()
@@ -121,7 +127,7 @@ export default function KycScreen() {
   // live camera appears without an extra tap (falls back to the Allow button if
   // the OS prompt was previously dismissed).
   useEffect(() => {
-    if (step === 4 && camPermission && !camPermission.granted && camPermission.canAskAgain) {
+    if (step === 5 && camPermission && !camPermission.granted && camPermission.canAskAgain) {
       requestCamPermission()
     }
   }, [step, camPermission, requestCamPermission])
@@ -231,6 +237,15 @@ export default function KycScreen() {
     return Object.keys(errs).length === 0
   }
 
+  function validateStep3(): boolean {
+    const errs: Record<string, string> = {}
+    if (nextOfKinName.trim().length < 2) errs.nextOfKinName = "Enter your next of kin's name"
+    if (!/^\+?\d[\d\s-]{7,}$/.test(nextOfKinPhone.trim())) errs.nextOfKinPhone = 'Enter a valid phone number'
+    if (motherMaidenName.trim().length < 2) errs.motherMaidenName = "Enter your mother's maiden name"
+    setFieldErr(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const captureSelfie = async () => {
     if (!cameraRef.current || capturing) return
     setCapturing(true)
@@ -267,7 +282,7 @@ export default function KycScreen() {
     if (!/^\d{10}$/.test(acctNo))                     { setSubmitError('Settlement account number must be 10 digits'); return }
     if (bank.length < 2 || bank.length > 80)          { setSubmitError('Enter your settlement bank'); return }
 
-    if (!selfieUri) { setSubmitError('Take a verification selfie to continue'); setStep(4); return }
+    if (!selfieUri) { setSubmitError('Take a verification selfie to continue'); setStep(5); return }
 
     setSaving(true); setSubmitError(null)
     try {
@@ -315,6 +330,10 @@ export default function KycScreen() {
         settlement_account_name:   acctName,
         settlement_account_number: acctNo,
         settlement_bank_name:      bank,
+        // Next of kin + mother's maiden name (PAC form requirements).
+        next_of_kin_name:   nextOfKinName.trim(),
+        next_of_kin_phone:  nextOfKinPhone.trim(),
+        mother_maiden_name: motherMaidenName.trim(),
         // Only overwrite BVN / NIN when actually provided this run.
         ...(bvnV.value ? { bvn: bvnV.value } : {}),
         ...(ninValue ? { nin: ninValue } : {}),
@@ -366,8 +385,9 @@ export default function KycScreen() {
   const cta =
     step === 1 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep1()) setStep(2) } }
     : step === 2 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep2()) setStep(3) } }
-    : step === 3 ? { label: 'Continue', disabled: false, loading: false, onPress: () => setStep(4) }
-    // Step 4 (selfie): can't submit until a photo is taken.
+    : step === 3 ? { label: 'Continue', disabled: false, loading: false, onPress: () => { if (validateStep3()) setStep(4) } }
+    : step === 4 ? { label: 'Continue', disabled: false, loading: false, onPress: () => setStep(5) }
+    // Step 5 (selfie): can't submit until a photo is taken.
     : { label: saving ? 'Submitting…' : 'Submit KYC', disabled: saving || !selfieUri, loading: saving, onPress: submit }
 
   const meta = STEP_META[step]
@@ -383,12 +403,12 @@ export default function KycScreen() {
                 <Icon name="solar:arrow-left-linear" size={20} color={colors.text} />
               </Pressable>
             ) : <View style={{ width: 40 }} />}
-            <Text variant="eyebrow" tone="muted">STEP {step} / 4</Text>
+            <Text variant="eyebrow" tone="muted">STEP {step} / 5</Text>
             <View style={{ width: 40 }} />
           </View>
 
           <View style={{ flexDirection: 'row', gap: 6, marginTop: spacing.md }}>
-            {[1, 2, 3, 4].map(n => (
+            {[1, 2, 3, 4, 5].map(n => (
               <MotiView
                 key={n}
                 animate={{ backgroundColor: n <= step ? (n === step ? colors.accent : colors.brand) : colors.border }}
@@ -596,8 +616,38 @@ export default function KycScreen() {
               </View>
             )}
 
-            {/* ───────────────────────── STEP 3 ───────────────────────── */}
+            {/* ───────────────────────── STEP 3 — next of kin ───────────────────────── */}
             {step === 3 && (
+              <View>
+                <UField
+                  label="Next of kin — full name"
+                  value={nextOfKinName}
+                  onChangeText={(v: string) => { setNextOfKinName(v); clearErr('nextOfKinName') }}
+                  placeholder="Full name of your next of kin"
+                  autoCapitalize="words"
+                  error={fieldErr.nextOfKinName}
+                />
+                <UField
+                  label="Next of kin — phone number"
+                  value={nextOfKinPhone}
+                  onChangeText={(v: string) => { setNextOfKinPhone(v); clearErr('nextOfKinPhone') }}
+                  placeholder="e.g. 08012345678"
+                  keyboardType="phone-pad"
+                  error={fieldErr.nextOfKinPhone}
+                />
+                <UField
+                  label="Mother's maiden name"
+                  value={motherMaidenName}
+                  onChangeText={(v: string) => { setMotherMaidenName(v); clearErr('motherMaidenName') }}
+                  placeholder="Your mother's maiden name"
+                  autoCapitalize="words"
+                  error={fieldErr.motherMaidenName}
+                />
+              </View>
+            )}
+
+            {/* ───────────────────────── STEP 4 — review ───────────────────────── */}
+            {step === 4 && (
               <View>
                 {/* Verified banner */}
                 <View style={styles.banner(bvnDone)}>
@@ -626,7 +676,10 @@ export default function KycScreen() {
                   <ReviewRow label="ID type" value={idType} />
                   <ReviewRow label="Settlement bank" value={bankName} />
                   <ReviewRow label="Account number" value={accountNumber} />
-                  <ReviewRow label="Account name" value={accountName} last />
+                  <ReviewRow label="Account name" value={accountName} />
+                  <ReviewRow label="Next of kin" value={nextOfKinName} />
+                  <ReviewRow label="Next of kin phone" value={nextOfKinPhone} />
+                  <ReviewRow label="Mother's maiden name" value={motherMaidenName} last />
                 </View>
 
                 <View style={styles.uploadNote()}>
@@ -640,8 +693,8 @@ export default function KycScreen() {
               </View>
             )}
 
-            {/* ───────────────────────── STEP 4 — selfie ───────────────────────── */}
-            {step === 4 && (
+            {/* ───────────────────────── STEP 5 — selfie ───────────────────────── */}
+            {step === 5 && (
               <View style={{ alignItems: 'center' }}>
                 <View style={styles.selfieFrame()}>
                   {selfieUri ? (
