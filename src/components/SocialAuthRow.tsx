@@ -11,10 +11,11 @@ import { colors, spacing } from '@/theme'
 // Dismisses the in-app browser tab once the OAuth redirect completes.
 WebBrowser.maybeCompleteAuthSession()
 
-export type OAuthProvider = 'google' | 'apple' | 'facebook'
+// linkedin_oidc = Supabase's LinkedIn (OpenID Connect) provider id.
+export type OAuthProvider = 'google' | 'apple' | 'facebook' | 'linkedin_oidc'
 
 // Shared "or continue with" social sign-in row used by BOTH the login and
-// register screens, so signing up with iCloud / Gmail / Facebook is available
+// register screens, so signing up with iCloud / Gmail / Facebook / LinkedIn is available
 // everywhere and there's one code path to maintain.
 //
 // NOTE: each provider must also be enabled in the Supabase dashboard, and
@@ -69,18 +70,21 @@ export function SocialAuthRow({ label = 'or continue with' }: { label?: string }
         <Text variant="small" tone="subtle">{label}</Text>
         <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
       </Row>
-      <Row gap="md">
-        <SocialButton provider="google" icon="logos:google-icon" onPress={oauth} busy={oauthBusy} />
-        <SocialButton provider="apple" icon="mdi:apple" tint={colors.text} onPress={oauth} busy={oauthBusy} />
-        <SocialButton provider="facebook" icon="logos:facebook" onPress={oauth} busy={oauthBusy} />
+      <Row justify="center" gap="2xl">
+        <SocialButton provider="google" icon="logos:google-icon" label="Google" onPress={oauth} busy={oauthBusy} />
+        <SocialButton provider="apple" icon="mdi:apple" label="Apple" tint={colors.text} onPress={oauth} busy={oauthBusy} />
+        <SocialButton provider="facebook" icon="logos:facebook" label="Facebook" onPress={oauth} busy={oauthBusy} />
+        <SocialButton provider="linkedin_oidc" icon="logos:linkedin-icon" label="LinkedIn" onPress={oauth} busy={oauthBusy} />
       </Row>
     </View>
   )
 }
 
-function SocialButton({ provider, icon, tint, onPress, busy }: {
+// Bare brand marks (no card behind them) with a full 48pt tap target.
+function SocialButton({ provider, icon, label, tint, onPress, busy }: {
   provider: OAuthProvider
   icon: string
+  label: string
   tint?: string
   onPress: (p: OAuthProvider) => void
   busy: OAuthProvider | null
@@ -91,17 +95,19 @@ function SocialButton({ provider, icon, tint, onPress, busy }: {
     <Pressable
       onPress={() => onPress(provider)}
       disabled={disabled}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={`Continue with ${label}`}
       style={({ pressed }) => ({
-        flex: 1, height: 56, borderRadius: 16,
+        width: 48, height: 48,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: pressed ? colors.bgMuted : colors.surfaceRaised,
-        borderWidth: 1.5, borderColor: colors.border,
-        opacity: disabled && !isBusy ? 0.5 : 1,
+        opacity: pressed ? 0.55 : disabled && !isBusy ? 0.35 : 1,
+        transform: [{ scale: pressed ? 0.94 : 1 }],
       })}
     >
       {isBusy
-        ? <MotiView from={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ loop: true, type: 'timing', duration: 600 }} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: colors.bgSubtle }} />
-        : <Icon name={icon} size={24} color={tint ?? colors.text} />}
+        ? <MotiView from={{ opacity: 0.3 }} animate={{ opacity: 1 }} transition={{ loop: true, type: 'timing', duration: 600 }}><Icon name={icon} size={30} color={tint ?? colors.text} /></MotiView>
+        : <Icon name={icon} size={30} color={tint ?? colors.text} />}
     </Pressable>
   )
 }

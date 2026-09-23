@@ -98,6 +98,17 @@ module.exports = function (api) {
             'logos:google-icon',
             'logos:facebook',
             'mdi:apple',
+            'logos:linkedin-icon',
+
+            // ── Were used in code but missing here → rendered blank ──
+            'solar:camera-linear',        // KYC review note (selfie next)
+            'solar:camera-bold',          // KYC selfie permission card
+            'solar:lock-keyhole-bold',    // PIN screen + transaction PIN modal
+            'solar:arrow-right-up-bold',  // wallet history
+            'solar:refresh-bold',         // wallet history
+            'solar:card-transfer-bold',   // wallet history
+            'solar:clock-circle-linear',  // wallet history
+            'solar:close-square-bold',    // toast close
 
             // ── Auth / KYC / receipts / account ───────────────────────
             'solar:arrow-left-linear',
