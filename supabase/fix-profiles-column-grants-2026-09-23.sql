@@ -20,7 +20,18 @@
 -- the fix AND self-healing. Idempotent — safe to run repeatedly. INSERT is already
 -- granted (rows stay INSERTable), so `.upsert()` works once these are granted.
 --
+-- WEB IS UNAFFECTED. This only touches the `authenticated` role, and it is purely
+-- additive (re-grants the same non-money columns + the 4 new ones — nothing that
+-- was writable becomes blocked; money/VA columns stay revoked). The Niqra-web KYC
+-- writes profiles via the SERVICE-ROLE admin client (src/lib/actions/kyc.ts),
+-- which bypasses column grants entirely — so grant changes are invisible to web.
+--
+-- Wrapped in a transaction so the brief revoke→grant is atomic: no concurrent
+-- mobile write ever sees the intermediate "UPDATE revoked" state.
+--
 -- Run this in the Supabase SQL editor (or psql) against the shared project.
+
+begin;
 
 revoke update on public.profiles from authenticated, anon;
 
@@ -37,6 +48,8 @@ begin
     );
   execute format('grant update (%s) on public.profiles to authenticated', cols);
 end $$;
+
+commit;
 
 -- VERIFY — the four columns must now appear as UPDATE-granted for `authenticated`
 -- (this SELECT should return 4 rows):
