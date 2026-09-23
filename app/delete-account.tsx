@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { Text, Card, Row, Button, Icon, toast } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
+import { useShallow } from 'zustand/react/shallow'
 
 // Google Play requires account-based apps to let users request account + data
 // deletion from within the app. This submits a deletion request (stamps the
@@ -22,7 +23,7 @@ const WHAT_HAPPENS = [
 export default function DeleteAccountScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { signOut } = useAuthStore()
+  const { signOut } = useAuthStore(useShallow((s) => ({ signOut: s.signOut })))
   const [busy, setBusy] = useState(false)
 
   const confirm = () => {

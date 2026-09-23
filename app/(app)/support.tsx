@@ -10,6 +10,7 @@ import { colors, spacing, radii } from '@/theme'
 import { naira } from '@/lib/format'
 import { StockLogo } from '@/components/StockLogo'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
+import { useShallow } from 'zustand/react/shallow'
 
 type FaqItem = { q: string; a: string; action?: { label: string; href: string } }
 type FaqSection = { key: string; title: string; icon: string; items: FaqItem[] }
@@ -50,8 +51,8 @@ const FAQ: FaqSection[] = [
 
 export default function SupportScreen() {
   const router = useRouter()
-  const { pacOrders, loadOrders } = usePortfolioStore()
-  const { pacAccountId } = useAuthStore()
+  const { pacOrders, loadOrders } = usePortfolioStore(useShallow((s) => ({ pacOrders: s.pacOrders, loadOrders: s.loadOrders })))
+  const { pacAccountId } = useAuthStore(useShallow((s) => ({ pacAccountId: s.pacAccountId })))
 
   useEffect(() => { if (pacAccountId) loadOrders(pacAccountId).catch(() => {}) }, [pacAccountId])
 

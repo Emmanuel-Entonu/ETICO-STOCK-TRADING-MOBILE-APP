@@ -18,6 +18,7 @@ import { EticoMark } from '@/components/EticoMark'
 import { notifyTrade } from '@/lib/pushNotifications'
 import { PriceChart } from '@/components/PriceChart'
 import { TransactionPinModal } from '@/components/TransactionPinModal'
+import { useShallow } from 'zustand/react/shallow'
 
 type Side = 'BUY' | 'SELL'
 type OrderType = 'MARKET' | 'LIMIT'
@@ -50,8 +51,8 @@ export default function TradeScreen() {
     if (Platform.OS === 'ios') setTimeout(open, 450)
     else open()
   }, [])
-  const { marketData, positions, orderLoading, orderResult, placeOrder, clearOrderResult, loadMarketData, loadAccount } = usePortfolioStore()
-  const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, refreshWalletBalance } = useAuthStore()
+  const { marketData, positions, orderLoading, orderResult, placeOrder, clearOrderResult, loadMarketData, loadAccount } = usePortfolioStore(useShallow((s) => ({ marketData: s.marketData, positions: s.positions, orderLoading: s.orderLoading, orderResult: s.orderResult, placeOrder: s.placeOrder, clearOrderResult: s.clearOrderResult, loadMarketData: s.loadMarketData, loadAccount: s.loadAccount })))
+  const { pacAccountId, kycStatus, cacsStatus, walletBalance, user, refreshWalletBalance } = useAuthStore(useShallow((s) => ({ pacAccountId: s.pacAccountId, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, walletBalance: s.walletBalance, user: s.user, refreshWalletBalance: s.refreshWalletBalance })))
   const unlocked = usePinStore((s) => s.unlockedThisSession)
   const insets = useSafeAreaInsets()
 

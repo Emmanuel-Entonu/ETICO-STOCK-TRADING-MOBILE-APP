@@ -19,14 +19,15 @@ import { usePinStore } from '@/store/pinStore'
 import { Text, Icon } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
+import { useShallow } from 'zustand/react/shallow'
 
 const SLICE_PALETTE = ['#3A4429', '#DAA92F', '#3B82F6', '#0E9F6E', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316']
 
 export default function AllocationScreen() {
   const styles = useThemedStyles(makeStyles)
   const router = useRouter()
-  const { positions } = usePortfolioStore()
-  const { user, walletBalance } = useAuthStore()
+  const { positions } = usePortfolioStore(useShallow((s) => ({ positions: s.positions })))
+  const { user, walletBalance } = useAuthStore(useShallow((s) => ({ user: s.user, walletBalance: s.walletBalance })))
   const unlocked = usePinStore(s => s.unlockedThisSession)
   const account = usePortfolioStore((s) => s.account)
 

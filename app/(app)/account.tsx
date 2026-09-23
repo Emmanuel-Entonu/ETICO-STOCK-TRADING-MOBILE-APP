@@ -8,11 +8,12 @@ import { Text, Card, Row, Button, Divider, Icon, toast } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { EticoMark } from '@/components/EticoMark'
+import { useShallow } from 'zustand/react/shallow'
 
 export default function AccountScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, signOut, kycStatus, cacsStatus, pacAccountId } = useAuthStore()
+  const { user, signOut, kycStatus, cacsStatus, pacAccountId } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId })))
   const [confirmOut, setConfirmOut] = useState(false)
 
   const email = user?.email ?? '—'

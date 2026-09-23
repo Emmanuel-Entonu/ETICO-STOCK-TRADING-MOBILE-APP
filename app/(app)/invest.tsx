@@ -8,6 +8,7 @@ import { Text, Icon } from '@/ui'
 import { colors, spacing, radii, useThemedStyles, useEffectiveScheme } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { isEthical, ETHICAL_TICKERS } from '@/lib/ethicalTickers'
+import { useShallow } from 'zustand/react/shallow'
 
 // Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
@@ -79,7 +80,7 @@ const CARD_HEIGHT = 118
 export default function AssetsScreen() {
   const styles = useThemedStyles(makeStyles)
   const router = useRouter()
-  const { marketData, loadMarketData } = usePortfolioStore()
+  const { marketData, loadMarketData } = usePortfolioStore(useShallow((s) => ({ marketData: s.marketData, loadMarketData: s.loadMarketData })))
 
   // Bump on every tab focus so the MotiView keys change and the cards re-run
   // their stagger animation each visit.

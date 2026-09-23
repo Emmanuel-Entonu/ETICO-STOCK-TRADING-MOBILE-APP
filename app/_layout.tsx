@@ -14,13 +14,14 @@ import { ToastHost, Loader } from '@/ui'
 import { BrandSplash } from '@/components/BrandSplash'
 import * as Notifications from 'expo-notifications'
 import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome, maybeNotifyAccountEvents } from '@/lib/pushNotifications'
+import { useShallow } from 'zustand/react/shallow'
 
 const LOGIN_ROUTES = new Set(['welcome', 'login', 'register', 'reset'])
 
 function AuthGate() {
   const router = useRouter()
   const segments = useSegments()
-  const { user, loading, profileReady, kycStatus, hasPin } = useAuthStore()
+  const { user, loading, profileReady, kycStatus, hasPin } = useAuthStore(useShallow((s) => ({ user: s.user, loading: s.loading, profileReady: s.profileReady, kycStatus: s.kycStatus, hasPin: s.hasPin })))
   const unlockedThisSession = usePinStore(s => s.unlockedThisSession)
 
   useEffect(() => {
@@ -77,7 +78,7 @@ function AuthGate() {
 // the AuthGate is deciding where to send the user. Prevents the tabs from
 // flashing behind a pending PIN prompt on cold-start or resume-from-background.
 function TransitionSplash() {
-  const { user, loading, profileReady, hasPin } = useAuthStore()
+  const { user, loading, profileReady, hasPin } = useAuthStore(useShallow((s) => ({ user: s.user, loading: s.loading, profileReady: s.profileReady, hasPin: s.hasPin })))
   const unlockedThisSession = usePinStore(s => s.unlockedThisSession)
   const segments = useSegments()
 
@@ -251,7 +252,8 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthGate />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+      {/* freezeOnBlur: screens underneath the active one stop re-rendering. */}
+      <Stack screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="trade/[symbol]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />

@@ -21,6 +21,7 @@ import { Text, Button, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { NG_BANKS } from '@/lib/banks'
 import { resolveAccountName } from '@/lib/bankApi'
+import { useShallow } from 'zustand/react/shallow'
 
 type Step = 1 | 2 | 3 | 4 | 5
 
@@ -55,7 +56,7 @@ function formatDobInput(raw: string): string {
 export default function KycScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, loadProfile, ensureWallet } = useAuthStore()
+  const { user, loadProfile, ensureWallet } = useAuthStore(useShallow((s) => ({ user: s.user, loadProfile: s.loadProfile, ensureWallet: s.ensureWallet })))
   const [step, setStep] = useState<Step>(1)
 
   // Step 1

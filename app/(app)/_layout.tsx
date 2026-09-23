@@ -4,7 +4,10 @@ import { FloatingTabBar } from '@/components/FloatingTabBar'
 export default function AppLayout() {
   return (
     <Tabs
-      screenOptions={{ headerShown: false }}
+      // fade: a quick cross-fade instead of a hard cut between tabs.
+      // freezeOnBlur: inactive tabs stop re-rendering on store updates (wallet
+      // refreshes, market polls) so the visible screen keeps the frame budget.
+      screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />

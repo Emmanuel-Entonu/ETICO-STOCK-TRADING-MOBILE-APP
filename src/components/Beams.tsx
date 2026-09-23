@@ -12,7 +12,6 @@ import { forwardRef, useImperativeHandle, useEffect, useRef, useMemo, type FC, t
 import { View, StyleSheet } from 'react-native'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber/native'
-import { PerspectiveCamera } from '@react-three/drei/native'
 import { degToRad } from 'three/src/math/MathUtils.js'
 
 type UniformValue = THREE.IUniform<unknown> | unknown
@@ -82,13 +81,19 @@ function extendMaterial<T extends THREE.Material = THREE.Material>(
   })
 }
 
-const CanvasWrapper: FC<{ children: ReactNode; backgroundColor: string; style?: object }> = ({
+// Camera comes from fiber's Canvas prop (a default PerspectiveCamera with
+// auto aspect) — importing drei just for <PerspectiveCamera/> pulled ALL of drei
+// (stats-gl, a second three.js copy, ...) into the bundle.
+// `paused` stops the render loop entirely: tab screens stay mounted, so without
+// it this shader drew 60fps behind every other screen and starved transitions.
+const CanvasWrapper: FC<{ children: ReactNode; backgroundColor: string; style?: object; paused?: boolean }> = ({
   children,
   backgroundColor,
   style,
+  paused,
 }) => (
   <View style={[StyleSheet.absoluteFill, { backgroundColor }, style]}>
-    <Canvas frameloop="always" style={{ flex: 1 }}>
+    <Canvas frameloop={paused ? 'never' : 'always'} camera={{ position: [0, 0, 20], fov: 30 }} style={{ flex: 1 }}>
       {children}
     </Canvas>
   </View>
@@ -193,6 +198,8 @@ interface BeamsProps {
   scale?: number
   rotation?: number
   style?: object
+  /** Stop rendering (e.g. while the host screen is not focused). */
+  paused?: boolean
 }
 
 const Beams: FC<BeamsProps> = ({
@@ -209,6 +216,7 @@ const Beams: FC<BeamsProps> = ({
   scale = 0.2,
   rotation = 0,
   style,
+  paused = false,
 }) => {
   const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>>(null!)
 
@@ -269,13 +277,12 @@ const Beams: FC<BeamsProps> = ({
   )
 
   return (
-    <CanvasWrapper backgroundColor={backgroundColor} style={style}>
+    <CanvasWrapper backgroundColor={backgroundColor} style={style} paused={paused}>
       <group rotation={[0, 0, degToRad(rotation)]}>
         <PlaneNoise ref={meshRef} material={beamMaterial} count={beamNumber} width={beamWidth} height={beamHeight} />
         <DirLight color={lightColor} position={[0, 3, 10]} />
       </group>
       <ambientLight intensity={ambientIntensity} color={ambientColor} />
-      <PerspectiveCamera makeDefault position={[0, 0, 20]} fov={30} />
     </CanvasWrapper>
   )
 }

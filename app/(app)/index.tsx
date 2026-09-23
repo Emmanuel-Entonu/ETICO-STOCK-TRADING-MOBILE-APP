@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, useCallback, useMemo } from 'react'
 import { View, ScrollView, Pressable, RefreshControl, StyleSheet } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useShallow } from 'zustand/react/shallow'
 import { usePortfolioStore } from '@/store/portfolioStore'
@@ -26,6 +26,10 @@ type Tab = 'holdings' | 'orders'
 export default function HomeScreen() {
   const styles = useThemedStyles(makeStyles)
   const router = useRouter()
+  // Only animate the Beams shader while Home is the visible screen — tabs stay
+  // mounted, so it would otherwise render behind every other tab / modal.
+  const [focused, setFocused] = useState(true)
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false) }, []))
   // Shallow selector — prevents Home from re-rendering on unrelated store
   // updates (e.g. marketData refresh) which was chewing frames on the
   // Beams three.js canvas.
@@ -131,6 +135,7 @@ export default function HomeScreen() {
               }
             >
               <Beams
+                paused={!focused}
                 beamWidth={2}
                 beamHeight={15}
                 beamNumber={12}

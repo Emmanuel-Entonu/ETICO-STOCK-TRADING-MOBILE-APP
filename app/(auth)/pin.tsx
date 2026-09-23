@@ -18,6 +18,7 @@ import { usePinStore } from '@/store/pinStore'
 import { setPin, verifyPin, resetPinWithPassword, type VerifyPinResult } from '@/lib/pinApi'
 import { Text, Button, Icon } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
+import { useShallow } from 'zustand/react/shallow'
 
 const PIN_LEN = 6
 
@@ -30,7 +31,7 @@ export default function PinScreen() {
   const params = useLocalSearchParams<{ mode?: Mode }>()
   const mode: Mode = params.mode === 'create' ? 'create' : 'enter'
 
-  const { user, signOut, loadProfile } = useAuthStore()
+  const { user, signOut, loadProfile } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, loadProfile: s.loadProfile })))
   const unlock = usePinStore(s => s.unlock)
 
   const [pin, setPinValue]             = useState('')

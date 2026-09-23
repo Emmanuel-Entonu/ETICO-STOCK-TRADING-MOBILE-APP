@@ -8,12 +8,13 @@ import { Text, Row, Icon, Button, toast } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { naira } from '@/lib/format'
 import { StockLogo } from '@/components/StockLogo'
+import { useShallow } from 'zustand/react/shallow'
 
 export default function OrderStatusScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { pacOrders, loadOrders, cancelOrder } = usePortfolioStore()
-  const { pacAccountId } = useAuthStore()
+  const { pacOrders, loadOrders, cancelOrder } = usePortfolioStore(useShallow((s) => ({ pacOrders: s.pacOrders, loadOrders: s.loadOrders, cancelOrder: s.cancelOrder })))
+  const { pacAccountId } = useAuthStore(useShallow((s) => ({ pacAccountId: s.pacAccountId })))
   const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {

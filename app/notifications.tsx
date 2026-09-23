@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useNotificationStore, type NotifType } from '@/store/notificationStore'
 import { Text, Row, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
+import { useShallow } from 'zustand/react/shallow'
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime()
@@ -27,9 +28,9 @@ const TYPE_ICON: Record<NotifType, string> = {
 
 export default function NotificationsScreen() {
   const router = useRouter()
-  const { pacOrders, loadOrders } = usePortfolioStore()
-  const { pacAccountId, kycStatus, cacsStatus, cacsRejectionReason } = useAuthStore()
-  const { items, sync, markRead, markAllRead, remove } = useNotificationStore()
+  const { pacOrders, loadOrders } = usePortfolioStore(useShallow((s) => ({ pacOrders: s.pacOrders, loadOrders: s.loadOrders })))
+  const { pacAccountId, kycStatus, cacsStatus, cacsRejectionReason } = useAuthStore(useShallow((s) => ({ pacAccountId: s.pacAccountId, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, cacsRejectionReason: s.cacsRejectionReason })))
+  const { items, sync, markRead, markAllRead, remove } = useNotificationStore(useShallow((s) => ({ items: s.items, sync: s.sync, markRead: s.markRead, markAllRead: s.markAllRead, remove: s.remove })))
 
   useEffect(() => {
     if (pacAccountId) loadOrders(pacAccountId).catch(() => {})

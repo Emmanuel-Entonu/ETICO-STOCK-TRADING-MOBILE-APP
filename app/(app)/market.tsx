@@ -13,6 +13,7 @@ import { MiniSparkline } from '@/components/MiniSparkline'
 import { isEthical } from '@/lib/ethicalTickers'
 import { MotiView } from 'moti'
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, cancelAnimation, Easing } from 'react-native-reanimated'
+import { useShallow } from 'zustand/react/shallow'
 
 interface CategoryMeta {
   key:  string
@@ -88,7 +89,7 @@ export default function MarketScreen() {
     params.risk === 'low' || params.risk === 'medium' || params.risk === 'high'
       ? params.risk
       : null
-  const { marketData, loadingMarket, loadMarketData, apiStatus } = usePortfolioStore()
+  const { marketData, loadingMarket, loadMarketData, apiStatus } = usePortfolioStore(useShallow((s) => ({ marketData: s.marketData, loadingMarket: s.loadingMarket, loadMarketData: s.loadMarketData, apiStatus: s.apiStatus })))
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category>('All')
 
