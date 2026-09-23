@@ -31,12 +31,12 @@ Set up on the **company** Apple Developer account, 2026-09-23.
 | Services ID → Domain | `cmrxwuqfagqskrjdmjte.supabase.co` | not secret |
 | Services ID → Return URL | `https://cmrxwuqfagqskrjdmjte.supabase.co/auth/v1/callback` | not secret |
 | Key name | `ETICO Sign In with Apple` | not secret |
-| Key ID | `296TLG6SUU` | not secret |
-| Private key file | `AuthKey_296TLG6SUU.p8` | **SECRET** — password manager. Apple allows one download only; if lost, revoke and create a new key. |
+| Key ID | `29GTLG6SUU` | not secret |
+| Private key file | `AuthKey_29GTLG6SUU.p8` | **SECRET** — password manager. Apple allows one download only; if lost, revoke and create a new key. |
 | Supabase "Client IDs" | `ng.moneta.capital.signin,ng.moneta.capital` | not secret |
 | Supabase "Secret Key (for OAuth)" | JWT generated from the .p8 (ES256, iss = Team ID, sub = Services ID, kid = Key ID) | **SECRET** — Supabase only. **Expires every 6 months.** |
-| Secret generated on | _(fill in)_ | |
-| **Secret expires / regenerate by** | _(fill in — 6 months after generation; set a calendar reminder a month earlier)_ | |
+| Secret generated on | 2026-09-23 | |
+| **Secret expires / regenerate by** | **2027-03-25** (reminder ~2027-02-25) | |
 
 If the secret expires, Apple sign-in fails for everyone until a new one is
 generated from the same `.p8` and pasted into Supabase.
