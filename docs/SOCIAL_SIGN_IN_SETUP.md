@@ -45,11 +45,11 @@ generated from the same `.p8` and pasted into Supabase.
 
 | Item | Value | Secret? / Stored at |
 |---|---|---|
-| Google Cloud project | _(fill in)_ | not secret |
+| Google Cloud project | `etico-492e7` (same project as Firebase push) | not secret |
 | OAuth consent screen | External, app name "ETICO", domain `etico.ng`, privacy `https://www.etico.ng/privacy` | not secret |
-| OAuth client type | Web application | |
+| OAuth client type | Web application — "ETICO Supabase" (created 2026-09-23) | |
 | Authorized redirect URI | `https://cmrxwuqfagqskrjdmjte.supabase.co/auth/v1/callback` | not secret |
-| Client ID | _(fill in)_ | not secret |
+| Client ID | `927559305259-8f48gb56oos69e57gnvh50a1hjgvvkvf.apps.googleusercontent.com` | not secret |
 | Client Secret | — | **SECRET** — password manager + Supabase |
 
 ## Facebook
