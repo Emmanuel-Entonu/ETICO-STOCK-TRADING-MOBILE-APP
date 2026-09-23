@@ -8,6 +8,7 @@ import {
 import { usePinStore } from '@/store/pinStore'
 import { createVirtualAccount, fundWalletFromVa as fundWalletFromVaApi } from '@/lib/monetaApi'
 import { getAccountById } from '@/lib/pacApi'
+import { config } from '@/lib/config'
 // NOTE: `usePortfolioStore` is imported lazily inside `signOut` to avoid a
 // module-load circular import (portfolioStore already imports this file).
 
@@ -35,7 +36,9 @@ interface AuthState {
 
   setSession: (session: Session | null) => void
   signIn: (email: string, password: string) => Promise<string | null>
-  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<string | null>
+  // Resolves { error } on failure; { error: null, signedIn } on success. signedIn
+  // is true when the account was created pre-confirmed and a session is live.
+  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: string | null; signedIn: boolean }>
   signOut: () => Promise<void>
   loadProfile: () => Promise<void>
   // Lazily create the Moneta VA from the user's KYC identity, then persist it.
@@ -94,27 +97,61 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUp: async (email, password, fullName, phone) => {
+    const fail = (error: string) => ({ error, signedIn: false })
     const em = validateEmail(email)
-    if (!em.ok) return em.error
+    if (!em.ok) return fail(em.error)
     const pw = validatePassword(password)
-    if (!pw.ok) return pw.error
+    if (!pw.ok) return fail(pw.error)
     const name = validateFullName(fullName)
-    if (!name.ok) return name.error
+    if (!name.ok) return fail(name.error)
     // Phone is optional at sign-up but validated when present. Stored in
     // user_metadata so the KYC screen can prefill it (esp. when the user skips
     // BVN verification and we have no NIBSS record to pull it from).
     let phoneValue: string | undefined
     if (phone && phone.trim()) {
       const ph = validateNigerianPhone(phone)
-      if (!ph.ok) return ph.error
+      if (!ph.ok) return fail(ph.error)
       phoneValue = ph.value
     }
-    const { error } = await supabase.auth.signUp({
-      email: em.value,
-      password: pw.value,
-      options: { data: { full_name: name.value, ...(phoneValue ? { phone: phoneValue } : {}) } },
-    })
-    return error?.message ?? null
+
+    // Same path as web (Niqra-web /api/auth/signup): the account is created
+    // ALREADY CONFIRMED server-side — no Supabase confirmation email, no
+    // activation links that go stale, a clean "already exists" error, and our
+    // branded welcome email. Then sign straight in; AuthGate routes to PIN setup.
+    let routeReachable = true
+    try {
+      const res = await fetch(`${config.siteBase}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: name.value, email: em.value, password: pw.value, phone: phoneValue }),
+      })
+      if (res.status === 404 || res.status >= 500) routeReachable = false
+      else {
+        let j: { ok?: boolean; error?: string } = {}
+        try { j = await res.json() } catch { /* keep default */ }
+        if (!res.ok || !j.ok) {
+          if (res.status === 429) return fail('Too many sign-up attempts. Please wait a few minutes and try again.')
+          return fail(j.error ?? `Couldn't create your account (${res.status})`)
+        }
+        const { error: signErr } = await supabase.auth.signInWithPassword({ email: em.value, password: pw.value })
+        // Account exists and is confirmed either way; if sign-in hiccups the user
+        // just signs in manually.
+        return { error: null, signedIn: !signErr }
+      }
+    } catch {
+      routeReachable = false
+    }
+
+    // Fallback (web route unreachable): legacy Supabase sign-up with email confirmation.
+    if (!routeReachable) {
+      const { error } = await supabase.auth.signUp({
+        email: em.value,
+        password: pw.value,
+        options: { data: { full_name: name.value, ...(phoneValue ? { phone: phoneValue } : {}) } },
+      })
+      return { error: error?.message ?? null, signedIn: false }
+    }
+    return fail('Could not create your account')
   },
 
   signOut: async () => {

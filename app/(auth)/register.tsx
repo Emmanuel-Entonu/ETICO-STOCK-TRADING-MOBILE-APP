@@ -59,10 +59,12 @@ export default function RegisterScreen() {
     if (!name.ok || !em.ok || !ph.ok || !pw.ok) return
 
     setLoading(true)
-    const err = await signUp(em.value, pw.value, name.value, ph.value)
+    const { error: err, signedIn } = await signUp(em.value, pw.value, name.value, ph.value)
     setLoading(false)
     if (err) setFormError(err)
-    else setSuccess(true)
+    // Signed in (pre-confirmed account): AuthGate moves us on to PIN setup.
+    // Only the legacy email-confirmation fallback needs the "check your email" screen.
+    else if (!signedIn) setSuccess(true)
   }
 
   if (success) {
