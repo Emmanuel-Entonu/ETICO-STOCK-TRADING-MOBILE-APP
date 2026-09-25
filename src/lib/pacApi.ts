@@ -1,5 +1,6 @@
 import { config } from './config'
 import { supabase } from './supabase'
+import { resilientFetch } from './net'
 import { ETHICAL_TICKERS } from './ethicalTickers'
 
 // Every proxy call must carry the caller's Supabase JWT so the Vercel
@@ -155,7 +156,9 @@ async function readJson(res: Response, label: string): Promise<unknown> {
 async function pacProxy<T>(path: string, method = 'GET', body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
   const url = `${config.proxyBase}/api/pac-proxy?path=${encodeURIComponent(path)}`
   const isGet = method === 'GET' || method === 'HEAD'
-  const res = await fetch(url, {
+  // Timeout on every call; GETs retry transient failures with jittered backoff.
+  // Writes (orders, cancels) are never retried.
+  const res = await resilientFetch(url, {
     method,
     headers: {
       'Accept': 'application/json',
@@ -170,11 +173,10 @@ async function pacProxy<T>(path: string, method = 'GET', body?: unknown, extraHe
 }
 
 async function mdsGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${config.proxyBase}/api/mds-proxy?path=${encodeURIComponent(path)}`, {
-    headers: {
-      'Accept': 'application/json',
-      ...(await authHeader()),
-    },
+  // Public market data: NO Authorization header, so every user shares the
+  // same Vercel CDN-cached response (the proxy sets s-maxage per endpoint).
+  const res = await resilientFetch(`${config.proxyBase}/api/mds-proxy?path=${encodeURIComponent(path)}`, {
+    headers: { 'Accept': 'application/json' },
   })
   if (!res.ok) throw new Error(`MDS ${res.status}: ${await res.text()}`)
   return readJson(res, `mds ${path.split('?')[0]}`) as Promise<T>

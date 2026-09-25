@@ -1,5 +1,5 @@
 // @@iconify-code-gen
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -12,6 +12,7 @@ import { useNotificationStore } from '@/store/notificationStore'
 import { useThemeStore, resolvePalette, resolveScheme, setActivePalette, colors } from '@/theme'
 import { ToastHost, Loader } from '@/ui'
 import { BrandSplash } from '@/components/BrandSplash'
+import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import * as Notifications from 'expo-notifications'
 import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome, maybeNotifyAccountEvents } from '@/lib/pushNotifications'
 import { useShallow } from 'zustand/react/shallow'
@@ -153,6 +154,7 @@ export default function RootLayout() {
   const segments = useSegments()
   segmentsRef.current = segments
   const setSession = useAuthStore((s) => s.setSession)
+  const lastForegroundRefresh = useRef(0)
   const mode = useThemeStore((s) => s.mode)
 
   // Sync the active palette BEFORE this render commits, so every child
@@ -202,6 +204,11 @@ export default function RootLayout() {
       if (state === 'active') {
         pin.handleForeground()
         const s = useAuthStore.getState()
+        // Throttle: re-fetch at most every 30s on foreground. Rapid app
+        // switching was firing a profile + orders + PAC round-trip each time.
+        const now = Date.now()
+        if (now - lastForegroundRefresh.current < 30_000) return
+        lastForegroundRefresh.current = now
         if (s.user) s.loadProfile()
         // Refresh orders on foreground and sync notifications, so any fill that
         // happened while the app was away is detected and notified.
@@ -252,25 +259,27 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthGate />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      {/* freezeOnBlur: screens underneath the active one stop re-rendering. */}
-      <Stack screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
-        <Stack.Screen name="trade/[symbol]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="receipt/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="orders" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="wallet" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="fund-wallet" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="watchlist" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="delete-account" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="contact" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="order-status/[id]" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="allocation" options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: 320 }} />
-      </Stack>
+      <AppErrorBoundary>
+        {/* freezeOnBlur: screens underneath the active one stop re-rendering. */}
+        <Stack screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(app)" />
+          <Stack.Screen name="trade/[symbol]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="receipt/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="orders" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="wallet" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="fund-wallet" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="watchlist" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="terms" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="delete-account" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="contact" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="order-status/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="allocation" options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: 320 }} />
+        </Stack>
+      </AppErrorBoundary>
       <TransitionSplash />
       <PrivacyOverlay />
       <BrandSplash />
