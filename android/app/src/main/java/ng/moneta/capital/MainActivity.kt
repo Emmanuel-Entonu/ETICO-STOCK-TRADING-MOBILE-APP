@@ -23,10 +23,13 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme)
-    window.setFlags(
-      WindowManager.LayoutParams.FLAG_SECURE,
-      WindowManager.LayoutParams.FLAG_SECURE,
-    )
+    // Screenshots are allowed (FLAG_SECURE removed). Privacy when minimised is
+    // kept without blocking screenshots: on Android 13+ the recents/app-switcher
+    // preview is suppressed, and on every version the native cover below is
+    // drawn in onPause.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      setRecentsScreenshotEnabled(false)
+    }
     super.onCreate(null)
   }
 
@@ -72,7 +75,7 @@ class MainActivity : ReactActivity() {
 
   // --- ETICO privacy overlay (native) -------------------------------------
   // A full-screen cover attached in onPause and removed shortly after onResume.
-  // FLAG_SECURE alone does not stop Android showing the last rendered frame
+  // The recents flag alone does not stop Android showing the last rendered frame
   // during the resume transition; this View does.
   private var privacyOverlay: View? = null
   private val overlayHandler = Handler(Looper.getMainLooper())

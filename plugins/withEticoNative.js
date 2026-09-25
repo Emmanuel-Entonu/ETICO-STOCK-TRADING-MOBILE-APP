@@ -3,9 +3,9 @@
 // survive `expo prebuild` (the committed android/ used to rot on every SDK bump).
 //
 // It re-applies everything that used to live as hand edits in android/:
-//   1. FLAG_SECURE + a native privacy overlay in MainActivity (screenshot block
-//      + blank cover on minimize; the overlay hides the last frame on resume,
-//      which FLAG_SECURE alone does not).
+//   1. Privacy when minimised, screenshots ALLOWED: recents preview disabled on
+//      Android 13+ (setRecentsScreenshotEnabled) + a native cover drawn in
+//      onPause that also hides the last frame on resume.
 //   2. Theme-aware transparent system bars + dark-mode window background
 //      (fixes the white nav bar in dark mode under edge-to-edge).
 //   3. Release signing wired to android/keystore.properties (gitignored).
@@ -24,11 +24,11 @@ const {
 const fs = require('fs')
 const path = require('path')
 
-// ── 1. MainActivity: FLAG_SECURE + native privacy overlay ───────────────────
+// ── 1. MainActivity: recents-preview block + native privacy overlay ─────────
 const OVERLAY_BLOCK = `
   // --- ETICO privacy overlay (native) -------------------------------------
   // A full-screen cover attached in onPause and removed shortly after onResume.
-  // FLAG_SECURE alone does not stop Android showing the last rendered frame
+  // The recents flag alone does not stop Android showing the last rendered frame
   // during the resume transition; this View does.
   private var privacyOverlay: View? = null
   private val overlayHandler = Handler(Looper.getMainLooper())
@@ -85,9 +85,11 @@ const withMonetaMainActivity = (config) =>
       )
     }
 
-    // FLAG_SECURE right after the splash setTheme(), before super.onCreate().
-    if (!src.includes('FLAG_SECURE')) {
-      const flag = `setTheme(R.style.AppTheme)\n    window.setFlags(\n      WindowManager.LayoutParams.FLAG_SECURE,\n      WindowManager.LayoutParams.FLAG_SECURE,\n    )`
+    // Screenshots are ALLOWED (no FLAG_SECURE). Right after the splash
+    // setTheme(): hide the app from the recents/app-switcher preview on
+    // Android 13+; the native overlay below covers it on every version.
+    if (!src.includes('setRecentsScreenshotEnabled')) {
+      const flag = `setTheme(R.style.AppTheme)\n    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {\n      setRecentsScreenshotEnabled(false)\n    }`
       if (/setTheme\(R\.style\.AppTheme\);?/.test(src)) {
         src = src.replace(/setTheme\(R\.style\.AppTheme\);?/, flag)
       } else {
