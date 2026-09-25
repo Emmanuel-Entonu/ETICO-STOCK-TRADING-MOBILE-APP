@@ -98,7 +98,7 @@ export default function ReceiptScreen() {
             <Text variant="h3">{order.secId}</Text>
             <Text variant="small" tone="muted">{buy ? 'Bought' : 'Sold'} {qty.toLocaleString()} {qty === 1 ? 'unit' : 'units'}</Text>
           </View>
-          <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: buy ? colors.positiveSubtle : colors.negativeSubtle }}>
+          <View>
             <Text style={{ fontSize: 12, fontWeight: '800', color: buy ? colors.positive : colors.negative }}>{order.side}</Text>
           </View>
         </Row>

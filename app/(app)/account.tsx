@@ -4,31 +4,38 @@ import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
-import { Text, Card, Row, Button, Divider, Icon, toast } from '@/ui'
+import { Text, Button, Icon, toast } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
-import { EticoMark } from '@/components/EticoMark'
 import { useShallow } from 'zustand/react/shallow'
 
 export default function AccountScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, signOut, kycStatus, cacsStatus, pacAccountId } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId })))
+  const { user, signOut, kycStatus, cacsStatus, pacAccountId, cscsNumber } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId, cscsNumber: s.cscsNumber })))
   const [confirmOut, setConfirmOut] = useState(false)
 
   const email = user?.email ?? '—'
 
-  // Honest status badges (issue log: "KYC verified / brokerage linked although
-  // not"). kyc_status flips to 'verified' as soon as KYC is SUBMITTED and a PAC
-  // account id exists before PAC has approved it — the account isn't usable until
-  // PAC approves the CSCS, so only that makes identity/brokerage green.
-  const identityStatus =
-    cacsStatus === 'approved' ? 'verified'
-    : cacsStatus === 'rejected' ? 'rejected'
-    : kycStatus === 'verified' || kycStatus === 'submitted' ? 'in_review'
-    : 'not_started'
-  const brokerageStatus = !pacAccountId ? 'not_linked' : cacsStatus === 'approved' ? 'linked' : 'pending'
-  const cscsStatus = cacsStatus === 'pending' ? 'in_review' : cacsStatus
+  // Statuses only turn green once PAC has approved the account on the partner
+  // dashboard (cacs_status = approved). Until then KYC reads "Under review" and
+  // CSCS / brokerage read "Pending". Approved → Verified / Linked / Linked.
+  const approved = cacsStatus === 'approved'
+  const rejected = cacsStatus === 'rejected'
+  const submitted = kycStatus === 'verified' || kycStatus === 'submitted'
+  const kycLine: StatusLine =
+    approved ? { label: 'Verified', tone: 'positive' }
+    : rejected ? { label: 'Rejected', tone: 'negative' }
+    : submitted ? { label: 'Under review', tone: 'warning' }
+    : { label: 'Not started', tone: 'muted' }
+  const cscsLine: StatusLine =
+    approved ? { label: 'Linked', tone: 'positive' }
+    : rejected ? { label: 'Rejected', tone: 'negative' }
+    : { label: 'Pending', tone: 'warning' }
+  const brokerageLine: StatusLine =
+    approved && pacAccountId ? { label: 'Linked', tone: 'positive' }
+    : { label: 'Pending', tone: 'warning' }
+
   const fullName = (user?.user_metadata?.full_name as string | undefined) ?? ''
   const firstName = fullName.split(' ')[0] || user?.email?.split('@')[0] || '?'
   const displayName = fullName || firstName
@@ -38,111 +45,60 @@ export default function AccountScreen() {
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }} showsVerticalScrollIndicator={false}>
 
-        {/* Small brand bar */}
-        <Row justify="center" align="center" style={{ paddingTop: spacing.lg, paddingBottom: spacing.sm }}>
-          <EticoMark size={22} />
-        </Row>
+        <Text variant="h3" align="center" style={{ paddingTop: spacing.lg }}>Account</Text>
 
-        {/* Profile hero — centred, gold-ringed avatar. */}
+        {/* Profile */}
         <MotiView
           from={{ opacity: 0, translateY: 8 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 340 }}
-          style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xl }}
+          style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.lg }}
         >
-          <View style={{ padding: 3, borderRadius: 999, borderWidth: 2, borderColor: colors.accent }}>
-            <View style={avatarStyle}>
-              <Text style={{ color: colors.textOnBrand, fontSize: 28, lineHeight: 34, fontWeight: '800', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
-            </View>
+          <View style={avatarStyle}>
+            <Text style={{ color: colors.textOnBrand, fontSize: 28, lineHeight: 34, fontWeight: '800', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
           </View>
           <Text variant="h2" style={{ marginTop: spacing.md }} numberOfLines={1}>{displayName}</Text>
           <Text variant="small" tone="muted" style={{ marginTop: 2 }} numberOfLines={1}>{email}</Text>
         </MotiView>
 
-        {/* Verification status */}
-        <SectionHeader label="VERIFICATION" />
-        <View style={{ paddingHorizontal: spacing.xl }}>
-          <Card padded={false}>
-            <StatusRow
-              icon="solar:shield-check-bold"
-              label="KYC Identity"
-              status={identityStatus}
-            />
-            <Divider my="xs" />
-            <StatusRow
-              icon="solar:document-text-bold"
-              label="NGX / CSCS"
-              status={cscsStatus}
-            />
-            <Divider my="xs" />
-            <StatusRow
-              icon="solar:card-2-bold"
-              label="Brokerage account"
-              status={brokerageStatus}
-            />
-          </Card>
-        </View>
+        {/* Verification */}
+        <Group label="Verification">
+          <ListRow icon="solar:shield-check-linear" label="KYC identity" status={kycLine} />
+          <ListRow icon="solar:document-text-linear" label="NGX / CSCS" status={cscsLine} />
+          {approved && cscsNumber ? (
+            <ListRow icon="solar:hashtag-linear" label="CSCS number" value={cscsNumber} />
+          ) : null}
+          <ListRow icon="solar:card-2-linear" label="Brokerage account" status={brokerageLine} last />
+        </Group>
 
         {/* Preferences */}
-        <SectionHeader label="PREFERENCES" />
-        <View style={{ paddingHorizontal: spacing.xl }}>
-          <Card padded={false}>
-            <MenuRow
-              icon="solar:bell-linear"
-              label="Notifications"
-              // Per-app notification switches live in the OS settings for ETICO.
-              onPress={() => { Linking.openSettings().catch(() => toast.error('Could not open settings', 'Open your phone Settings → Apps → ETICO → Notifications.')) }}
-            />
-            <Divider my="xs" />
-            <MenuRow
-              icon="solar:lock-password-linear"
-              label="Change password"
-              onPress={() => router.push({ pathname: '/(auth)/reset', params: user?.email ? { email: user.email } : {} } as never)}
-            />
-            <Divider my="xs" />
-            <MenuRow
-              icon="solar:info-circle-linear"
-              label="Help & support"
-              onPress={() => router.push('/(app)/support' as never)}
-            />
-            <Divider my="xs" />
-            <MenuRow
-              icon="solar:document-linear"
-              label="Legal & policies"
-              onPress={() => router.push('/legal' as never)}
-            />
-          </Card>
-        </View>
+        <Group label="Preferences">
+          <ListRow
+            icon="solar:bell-linear"
+            label="Notifications"
+            // Per-app notification switches live in the OS settings for ETICO.
+            onPress={() => { Linking.openSettings().catch(() => toast.error('Could not open settings', 'Open your phone Settings → Apps → ETICO → Notifications.')) }}
+          />
+          <ListRow
+            icon="solar:lock-password-linear"
+            label="Change password"
+            onPress={() => router.push({ pathname: '/(auth)/reset', params: user?.email ? { email: user.email } : {} } as never)}
+          />
+          <ListRow icon="solar:info-circle-linear" label="Help & support" onPress={() => router.push('/(app)/support' as never)} />
+          <ListRow icon="solar:document-linear" label="Legal & policies" onPress={() => router.push('/legal' as never)} last />
+        </Group>
 
-        {/* Account management */}
-        <SectionHeader label="ACCOUNT" />
-        <View style={{ paddingHorizontal: spacing.xl }}>
-          <Card padded={false}>
-            <MenuRow
-              icon="solar:danger-triangle-bold"
-              label="Delete account"
-              onPress={() => router.push('/delete-account' as never)}
-            />
-          </Card>
-        </View>
+        {/* Account */}
+        <Group label="Account">
+          <ListRow icon="solar:trash-bin-minimalistic-linear" label="Delete account" onPress={() => router.push('/delete-account' as never)} last />
+        </Group>
 
         {/* Sign out */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing['2xl'] }}>
-          <Pressable
-            onPress={() => setConfirmOut(true)}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-              height: 54, borderRadius: radii.lg,
-              backgroundColor: pressed ? colors.negativeSubtle : 'transparent',
-              borderWidth: 1.5, borderColor: colors.negativeSubtle,
-            })}
-          >
-            <Icon name="solar:logout-3-linear" size={20} color={colors.negative} />
-            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.negative }}>Sign Out</Text>
-          </Pressable>
-        </View>
+        <Group>
+          <ListRow icon="solar:logout-3-linear" label="Sign out" danger onPress={() => setConfirmOut(true)} last />
+        </Group>
 
-        <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing['3xl'] }}>
+        <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing['2xl'] }}>
           ETICO — by Moneta Capital Investment Limited
         </Text>
         <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs }}>
@@ -200,75 +156,50 @@ export default function AccountScreen() {
   )
 }
 
-function SectionHeader({ label }: { label: string }) {
+type Tone = 'positive' | 'warning' | 'negative' | 'muted'
+type StatusLine = { label: string; tone: Tone }
+
+const toneColor = (t: Tone) =>
+  t === 'positive' ? colors.positive : t === 'warning' ? colors.warning : t === 'negative' ? colors.negative : colors.textMuted
+
+// A titled, rounded group of rows (settings-list style).
+function Group({ label, children }: { label?: string; children: React.ReactNode }) {
   return (
-    <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing['2xl'], marginBottom: spacing.sm }}>
-      <Text variant="eyebrow" tone="muted">{label}</Text>
+    <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xl }}>
+      {label ? <Text variant="small" tone="muted" style={{ marginBottom: spacing.sm, marginLeft: spacing.xs }}>{label}</Text> : null}
+      <View style={{ borderRadius: radii.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
+        {children}
+      </View>
     </View>
   )
 }
 
-function StatusRow({ icon, label, status }: { icon: string; label: string; status: string }) {
-  const s = statusStyle(status)
-  return (
-    <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
-      <Row justify="space-between" align="center">
-        <Row gap="md" align="center" style={{ flex: 1 }}>
-          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={icon} size={18} color={colors.textMuted} />
-          </View>
-          <Text variant="bodyStrong">{label}</Text>
-        </Row>
-        <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: s.bg }}>
-          <Text style={{ fontSize: 11, fontWeight: '800', color: s.fg, letterSpacing: 0.4 }}>{s.label}</Text>
-        </View>
-      </Row>
+// One row: icon · label · (status text | value | chevron). Status is plain
+// coloured text — no pill.
+function ListRow({ icon, label, status, value, onPress, danger, last }: {
+  icon: string; label: string; status?: StatusLine; value?: string
+  onPress?: () => void; danger?: boolean; last?: boolean
+}) {
+  const content = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: spacing.lg }}>
+      <Icon name={icon} size={20} color={danger ? colors.negative : colors.textMuted} />
+      <View style={{
+        flex: 1, flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: spacing.sm,
+        marginLeft: spacing.md, borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.border,
+      }}>
+        <Text variant="body" style={{ flex: 1, color: danger ? colors.negative : colors.text }}>{label}</Text>
+        {status ? <Text variant="smallStrong" style={{ color: toneColor(status.tone) }}>{status.label}</Text> : null}
+        {value ? <Text variant="smallStrong" tone="muted" selectable>{value}</Text> : null}
+        {onPress && !danger ? <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textSubtle} /> : null}
+      </View>
     </View>
   )
-}
-
-function MenuRow({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  if (!onPress) return content
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: pressed ? colors.bgMuted : 'transparent' },
-      ]}
-    >
-      <Row justify="space-between" align="center">
-        <Row gap="md" align="center" style={{ flex: 1 }}>
-          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={icon} size={18} color={colors.textMuted} />
-          </View>
-          <Text variant="body">{label}</Text>
-        </Row>
-        <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textSubtle} />
-      </Row>
+    <Pressable onPress={onPress} style={({ pressed }) => ({ backgroundColor: pressed ? colors.bgMuted : 'transparent' })}>
+      {content}
     </Pressable>
   )
-}
-
-function statusStyle(status: string): { label: string; bg: string; fg: string } {
-  switch (status) {
-    case 'verified':
-    case 'approved':
-    case 'linked':
-      return { label: status === 'linked' ? 'LINKED' : 'VERIFIED', bg: colors.positiveSubtle, fg: colors.positive }
-    case 'rejected':
-      return { label: 'REJECTED', bg: colors.negativeSubtle, fg: colors.negative }
-    case 'pending':
-    case 'submitted':
-      return { label: status.toUpperCase(), bg: colors.warningSubtle, fg: colors.warning }
-    case 'in_review':
-      return { label: 'UNDER REVIEW', bg: colors.warningSubtle, fg: colors.warning }
-    case 'not_linked':
-      return { label: 'NOT LINKED', bg: colors.bgSubtle, fg: colors.textMuted }
-    case 'not_started':
-    case 'not_submitted':
-      return { label: 'NOT STARTED', bg: colors.bgSubtle, fg: colors.textMuted }
-    default:
-      return { label: status.toUpperCase().replace(/_/g, ' '), bg: colors.bgSubtle, fg: colors.textMuted }
-  }
 }
 
 const avatarStyle = {

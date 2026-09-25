@@ -8,8 +8,8 @@
 // Brand mapping: gold directional light (crests glow gold) + green ambient
 // (valleys get a brand-green wash) over a near-black card.
 
-import { forwardRef, useImperativeHandle, useEffect, useRef, useMemo, type FC, type ReactNode } from 'react'
-import { View, StyleSheet } from 'react-native'
+import { forwardRef, useImperativeHandle, useEffect, useRef, useMemo, useState, type FC, type ReactNode } from 'react'
+import { View, StyleSheet, AppState } from 'react-native'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber/native'
 import { degToRad } from 'three/src/math/MathUtils.js'
@@ -218,6 +218,19 @@ const Beams: FC<BeamsProps> = ({
   style,
   paused = false,
 }) => {
+  // iOS KILLS any app that issues GPU (OpenGL) commands while it is not active
+  // (gpus_ReturnNotPermittedKillClient). Screenshots, the screenshot markup
+  // editor, Control Centre, calls and app-switching all make the app
+  // inactive/background — rendering this shader through that crashed ETICO on
+  // iOS ("ETICO Crashed" when screen-grabbing). Stop the render loop the moment
+  // the app is not in the foreground.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active')
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => setAppActive(st === 'active'))
+    return () => sub.remove()
+  }, [])
+  const halted = paused || !appActive
+
   const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>>(null!)
 
   const beamMaterial = useMemo(
@@ -277,7 +290,7 @@ const Beams: FC<BeamsProps> = ({
   )
 
   return (
-    <CanvasWrapper backgroundColor={backgroundColor} style={style} paused={paused}>
+    <CanvasWrapper backgroundColor={backgroundColor} style={style} paused={halted}>
       <group rotation={[0, 0, degToRad(rotation)]}>
         <PlaneNoise ref={meshRef} material={beamMaterial} count={beamNumber} width={beamWidth} height={beamHeight} />
         <DirLight color={lightColor} position={[0, 3, 10]} />

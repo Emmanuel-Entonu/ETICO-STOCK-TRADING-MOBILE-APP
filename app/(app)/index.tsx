@@ -535,13 +535,10 @@ function EmptyState({ icon, title, subtitle, cta, onCta }: {
   )
 }
 
-const pnlPillStyle = (up: boolean) => ({
+// Plain coloured text (no pill background) — the text colour carries up/down.
+const pnlPillStyle = (_up: boolean) => ({
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
-  paddingHorizontal: 8,
-  paddingVertical: 3,
-  borderRadius: radii.pill,
-  backgroundColor: up ? colors.positiveSubtle : colors.negativeSubtle,
 })
 
 const makeStyles = () => StyleSheet.create({
@@ -582,10 +579,6 @@ const makeStyles = () => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   wealthPillText: {
     fontSize: 12,

@@ -149,7 +149,7 @@ function OrderRow({ order, onPress }: { order: PacOrderListItem; onPress: () => 
           </Row>
           <Text variant="small" tone="muted" style={{ marginTop: 2 }}>{naira(order.totalValue)}</Text>
         </View>
-        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill, backgroundColor: bg }}>
+        <View>
           <Text style={{ fontSize: 10, fontWeight: '800', color, letterSpacing: 0.4 }}>{label.toUpperCase()}</Text>
         </View>
         <Icon name="solar:alt-arrow-right-linear" size={16} color={colors.textSubtle} />

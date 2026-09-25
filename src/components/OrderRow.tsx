@@ -48,7 +48,7 @@ export const OrderRow = memo(function OrderRow({ order, cancelling, onCancel, on
         <View style={{ flex: 1, minWidth: 0 }}>
           <Row gap="sm" align="center">
             <Text variant="bodyStrong">{order.secId}</Text>
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: buy ? colors.positiveSubtle : colors.negativeSubtle }}>
+            <View>
               <Text style={{ fontSize: 10, fontWeight: '800', color: buy ? colors.positive : colors.negative, letterSpacing: 0.4 }}>{order.side}</Text>
             </View>
           </Row>
@@ -61,7 +61,7 @@ export const OrderRow = memo(function OrderRow({ order, cancelling, onCancel, on
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text variant="bodyStrong">{naira(order.totalValue)}</Text>
-          <View style={{ marginTop: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill, backgroundColor: statusBg }}>
+          <View style={{ marginTop: 4 }}>
             <Text style={{ fontSize: 10, fontWeight: '800', color: statusColor, letterSpacing: 0.4 }}>{statusLabel.toUpperCase()}</Text>
           </View>
         </View>

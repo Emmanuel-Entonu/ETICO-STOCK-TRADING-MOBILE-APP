@@ -176,7 +176,7 @@ export function HoldingsDonut({ holdings, totalValue, totalPnL, totalPnLPct, siz
       <View style={[styles.center, { width: size, height: size, top: 0 }]}>
         <Text style={styles.centerLabel}>PORTFOLIO</Text>
         <Text style={styles.centerValue}>{naira(totalValue)}</Text>
-        <View style={[styles.pnlPill, { backgroundColor: isUp ? colors.positiveSubtle : colors.negativeSubtle }]}>
+        <View style={styles.pnlPill}>
           <Text style={{ color: isUp ? colors.positive : colors.negative, fontSize: 11, fontWeight: '800' }}>
             {isUp ? '+' : ''}{totalPnLPct.toFixed(2)}%
           </Text>
@@ -221,9 +221,6 @@ const styles = StyleSheet.create({
   },
   pnlPill: {
     marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
   },
   legend: {
     marginTop: spacing.lg,
@@ -235,10 +232,6 @@ const styles = StyleSheet.create({
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: colors.bgSubtle,
     gap: 6,
   },
   legendDot: {

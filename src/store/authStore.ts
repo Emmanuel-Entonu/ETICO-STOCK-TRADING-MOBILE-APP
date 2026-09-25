@@ -25,6 +25,7 @@ interface AuthState {
   cacsStatus: CacsStatus
   cacsDocUrl: string | null
   cacsRejectionReason: string | null
+  cscsNumber: string | null    // CSCS number entered by PAC on approval
   walletBalance: number       // live PAC trading-wallet balance (buying power)
   vaAvailable: number         // Virtual Account balance available to fund the wallet
   hasPin: boolean
@@ -69,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   cacsStatus: 'not_submitted',
   cacsDocUrl: null,
   cacsRejectionReason: null,
+  cscsNumber: null,
   walletBalance: 0,
   vaAvailable: 0,
   hasPin: false,
@@ -172,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({
       user: null, session: null, pacAccountId: null,
       kycStatus: 'pending', cacsStatus: 'not_submitted',
-      cacsDocUrl: null, cacsRejectionReason: null,
+      cacsDocUrl: null, cacsRejectionReason: null, cscsNumber: null,
       walletBalance: 0, vaAvailable: 0, profileReady: false, hasPin: false,
       vaReference: null, vaNumber: null, vaBank: null, vaAccountName: null,
     })
@@ -196,7 +198,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
     const { data: profile, error: fetchError } = await supabase
       .from('profiles')
-      .select('pac_account_id, kyc_status, wallet_balance, va_available, cacs_status, cacs_doc_url, cacs_rejection_reason, email, has_pin, va_reference, va_number, va_bank, va_account_name')
+      .select('pac_account_id, kyc_status, wallet_balance, va_available, cacs_status, cacs_doc_url, cacs_rejection_reason, cscs_number, email, has_pin, va_reference, va_number, va_bank, va_account_name')
       .eq('id', user.id)
       .single()
 
@@ -210,6 +212,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         cacsStatus: (profile.cacs_status as CacsStatus) ?? 'not_submitted',
         cacsDocUrl: profile.cacs_doc_url ?? null,
         cacsRejectionReason: profile.cacs_rejection_reason ?? null,
+        cscsNumber: (profile as { cscs_number?: string | null }).cscs_number ?? null,
         walletBalance: profile.wallet_balance ?? 0,
         vaAvailable: profile.va_available ?? 0,
         hasPin: !!profile.has_pin,

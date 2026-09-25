@@ -463,12 +463,6 @@ const marketPillStyle = {
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
   gap: 6,
-  paddingHorizontal: 10,
-  paddingVertical: 5,
-  borderRadius: radii.pill,
-  backgroundColor: colors.bgSubtle,
-  borderWidth: 1,
-  borderColor: colors.border,
 }
 const marketPillDot = {
   width: 6,
@@ -476,13 +470,9 @@ const marketPillDot = {
   borderRadius: 3,
   backgroundColor: colors.textSubtle,
 }
-const chgPillStyle = (up: boolean) => ({
+const chgPillStyle = (_up: boolean) => ({
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
-  paddingHorizontal: 6,
-  paddingVertical: 3,
-  borderRadius: radii.pill,
-  backgroundColor: up ? colors.positiveSubtle : colors.negativeSubtle,
 })
 
 const makeStyles = () => StyleSheet.create({

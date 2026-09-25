@@ -71,6 +71,10 @@ export default function WalletScreen() {
     const { data } = await supabase
       .from('va_ledger')
       .select('id, type, amount, balance_after, created_at')
+      // "Wallet moves" = money moved between the VA and the trading wallet.
+      // Bank deposits have their own tab (Moneta VA history), so exclude the
+      // ledger's 'deposit' rows here — they showed up twice.
+      .in('type', ['funding', 'reversal', 'payout'])
       .order('created_at', { ascending: false })
       .limit(25)
     setLedger((data as LedgerRow[]) ?? [])

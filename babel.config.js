@@ -110,6 +110,11 @@ module.exports = function (api) {
             'solar:clock-circle-linear',  // wallet history
             'solar:close-square-bold',    // toast close
 
+            // ── Account page (settings-list rows) ─────────────────────
+            'solar:shield-check-linear',
+            'solar:hashtag-linear',
+            'solar:trash-bin-minimalistic-linear',
+
             // ── Auth / KYC / receipts / account ───────────────────────
             'solar:arrow-left-linear',
             'solar:alt-arrow-up-linear',

@@ -966,27 +966,15 @@ const legalBadgeStyle = {
 }
 
 // Style factories
-const changePillStyle = (up: boolean) => ({
+// Plain coloured text — no pill backgrounds.
+const changePillStyle = (_up: boolean) => ({
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
-  paddingHorizontal: 8,
-  paddingVertical: 3,
-  borderRadius: radii.pill,
-  backgroundColor: up ? colors.positiveSubtle : colors.negativeSubtle,
 })
-const sidePillStyle = (buy: boolean) => ({
-  paddingHorizontal: 8,
-  paddingVertical: 3,
-  borderRadius: radii.pill,
-  backgroundColor: buy ? colors.positiveSubtle : colors.negativeSubtle,
-})
+const sidePillStyle = (_buy: boolean) => ({})
 const ownedPillStyle = {
   flexDirection: 'row' as const,
   alignItems: 'center' as const,
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: radii.pill,
-  backgroundColor: colors.brandSubtle,
 }
 
 const makeStyles = () => StyleSheet.create({

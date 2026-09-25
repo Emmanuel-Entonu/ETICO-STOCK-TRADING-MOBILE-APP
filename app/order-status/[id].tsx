@@ -92,7 +92,7 @@ export default function OrderStatusScreen() {
               <Text variant="h3">{order.secId}</Text>
               <Text variant="small" tone="muted">{side} {qty.toLocaleString()} {qty === 1 ? 'unit' : 'units'} · #{order.orderNo}</Text>
             </View>
-            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: bg }}>
+            <View>
               <Text style={{ fontSize: 11, fontWeight: '800', color }}>{label.toUpperCase()}</Text>
             </View>
           </Row>

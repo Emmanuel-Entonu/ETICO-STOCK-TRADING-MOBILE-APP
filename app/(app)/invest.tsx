@@ -209,8 +209,8 @@ function ProductCard({ product, onPress }: { product: Product; onPress?: () => v
         </View>
 
         {disabled ? (
-          <View style={[styles.heroSoon, { backgroundColor: dark ? 'rgba(255,255,255,0.92)' : 'rgba(11,31,20,0.88)' }]}>
-            <Text style={[styles.heroSoonText, { color: dark ? '#0B1F14' : '#FFFFFF' }]}>Soon</Text>
+          <View style={styles.heroSoon}>
+            <Text style={[styles.heroSoonText, { color: fg }]}>Soon</Text>
           </View>
         ) : (
           <View style={styles.heroFab}>
@@ -220,7 +220,7 @@ function ProductCard({ product, onPress }: { product: Product; onPress?: () => v
       </View>
 
       {product.badge && !disabled && (
-        <View style={[styles.heroBadge, { backgroundColor: dark ? 'rgba(255,255,255,0.18)' : 'rgba(11,31,20,0.12)' }]}>
+        <View style={styles.heroBadge}>
           <Text style={[styles.heroBadgeText, { color: fg }]}>{product.badge}</Text>
         </View>
       )}
@@ -345,8 +345,6 @@ const makeStyles = () => StyleSheet.create({
   },
   heroSoon: {
     height: 30,
-    paddingHorizontal: 14,
-    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -359,9 +357,6 @@ const makeStyles = () => StyleSheet.create({
     position: 'absolute',
     top: spacing.sm,
     right: spacing.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
   },
   heroBadgeText: {
     fontSize: 10.5,
