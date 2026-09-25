@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { View, ScrollView, Pressable, Modal, Linking } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
+import { setStatusBarStyle } from 'expo-status-bar'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
 import { Text, Button, Icon, toast } from '@/ui'
-import { colors, spacing, radii } from '@/theme'
+import { colors, spacing, radii, useThemeStore, resolveScheme } from '@/theme'
+import { useNotificationStore } from '@/store/notificationStore'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -41,69 +43,103 @@ export default function AccountScreen() {
   const displayName = fullName || firstName
   const initial = (firstName[0] ?? '?').toUpperCase()
 
+  // Light status-bar text over the black header while this tab is visible;
+  // restore the theme's style when leaving (tabs stay mounted).
+  const mode = useThemeStore((st) => st.mode)
+  useFocusEffect(useCallback(() => {
+    setStatusBarStyle('light')
+    return () => setStatusBarStyle(resolveScheme(mode) === 'dark' ? 'light' : 'dark')
+  }, [mode]))
+
+  const unread = useNotificationStore((st) => {
+    const hidden = new Set(st.dismissed)
+    return [...st.server, ...st.items].filter((n) => !n.read && !hidden.has(n.id)).length
+  })
+
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }} showsVerticalScrollIndicator={false}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: HEADER_BG }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
-        <Text variant="h3" align="center" style={{ paddingTop: spacing.lg }}>Account</Text>
-
-        {/* Profile */}
-        <MotiView
-          from={{ opacity: 0, translateY: 8 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 340 }}
-          style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.lg }}
-        >
-          <View style={avatarStyle}>
-            <Text style={{ color: colors.textOnBrand, fontSize: 28, lineHeight: 34, fontWeight: '800', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
+        {/* ── Header (black). Animation slot: render the background animation
+            as the FIRST child of this View with StyleSheet.absoluteFill — the
+            content below sits on top of it. ── */}
+        <View style={{ backgroundColor: HEADER_BG, paddingBottom: spacing['2xl'] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.md, height: 56 }}>
+            <View style={{ width: 40 }} />
+            <Text style={{ color: '#FFFFFF', fontSize: 17, lineHeight: 22, fontWeight: '700' }}>Account</Text>
+            <Pressable
+              onPress={() => router.push('/notifications' as never)}
+              hitSlop={10}
+              accessibilityLabel="Notifications"
+              style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.10)' })}
+            >
+              <Icon name="solar:bell-linear" size={20} color="#FFFFFF" />
+              {unread > 0 ? <View style={{ position: 'absolute', top: 9, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.negative, borderWidth: 1.5, borderColor: HEADER_BG }} /> : null}
+            </Pressable>
           </View>
-          <Text variant="h2" style={{ marginTop: spacing.md }} numberOfLines={1}>{displayName}</Text>
-          <Text variant="small" tone="muted" style={{ marginTop: 2 }} numberOfLines={1}>{email}</Text>
-        </MotiView>
 
-        {/* Verification */}
-        <Group label="Verification">
-          <ListRow icon="solar:shield-check-linear" label="KYC identity" status={kycLine} />
-          <ListRow icon="solar:document-text-linear" label="NGX / CSCS" status={cscsLine} />
-          {approved && cscsNumber ? (
-            <ListRow icon="solar:hashtag-linear" label="CSCS number" value={cscsNumber} />
-          ) : null}
-          <ListRow icon="solar:card-2-linear" label="Brokerage account" status={brokerageLine} last />
-        </Group>
+          <MotiView
+            from={{ opacity: 0, translateY: 8 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 340 }}
+            style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg }}
+          >
+            <View style={avatarStyle}>
+              <Text style={{ color: colors.textOnBrand, fontSize: 30, lineHeight: 36, fontWeight: '800', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false }}>{initial}</Text>
+            </View>
+            <Text style={{ color: '#FFFFFF', fontSize: 20, lineHeight: 26, fontWeight: '800', marginTop: spacing.md }} numberOfLines={1}>{displayName}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, lineHeight: 18, marginTop: 2 }} numberOfLines={1}>{email}</Text>
+          </MotiView>
+        </View>
 
-        {/* Preferences */}
-        <Group label="Preferences">
-          <ListRow
-            icon="solar:bell-linear"
-            label="Notifications"
-            // Per-app notification switches live in the OS settings for ETICO.
-            onPress={() => { Linking.openSettings().catch(() => toast.error('Could not open settings', 'Open your phone Settings → Apps → ETICO → Notifications.')) }}
-          />
-          <ListRow
-            icon="solar:lock-password-linear"
-            label="Change password"
-            onPress={() => router.push({ pathname: '/(auth)/reset', params: user?.email ? { email: user.email } : {} } as never)}
-          />
-          <ListRow icon="solar:info-circle-linear" label="Help & support" onPress={() => router.push('/(app)/support' as never)} />
-          <ListRow icon="solar:document-linear" label="Legal & policies" onPress={() => router.push('/legal' as never)} last />
-        </Group>
+        {/* ── Sheet: our colour scheme, rounded top, grouped rows. The big
+            bottom padding + matching negative margin keeps the sheet colour
+            under an iOS over-scroll instead of revealing the black header. ── */}
+        <View style={sheetStyle()}>
+          {/* Verification */}
+          <Group label="Verification">
+            <ListRow icon="solar:shield-check-linear" label="KYC identity" status={kycLine} />
+            <ListRow icon="solar:document-text-linear" label="NGX / CSCS" status={cscsLine} />
+            {approved && cscsNumber ? (
+              <ListRow icon="solar:hashtag-linear" label="CSCS number" value={cscsNumber} />
+            ) : null}
+            <ListRow icon="solar:card-2-linear" label="Brokerage account" status={brokerageLine} last />
+          </Group>
 
-        {/* Account */}
-        <Group label="Account">
-          <ListRow icon="solar:trash-bin-minimalistic-linear" label="Delete account" onPress={() => router.push('/delete-account' as never)} last />
-        </Group>
+          {/* Preferences */}
+          <Group label="Preferences">
+            <ListRow
+              icon="solar:bell-linear"
+              label="Notifications"
+              // Per-app notification switches live in the OS settings for ETICO.
+              onPress={() => { Linking.openSettings().catch(() => toast.error('Could not open settings', 'Open your phone Settings → Apps → ETICO → Notifications.')) }}
+            />
+            <ListRow
+              icon="solar:lock-password-linear"
+              label="Change password"
+              onPress={() => router.push({ pathname: '/(auth)/reset', params: user?.email ? { email: user.email } : {} } as never)}
+            />
+            <ListRow icon="solar:info-circle-linear" label="Help & support" onPress={() => router.push('/(app)/support' as never)} />
+            <ListRow icon="solar:document-linear" label="Legal & policies" onPress={() => router.push('/legal' as never)} last />
+          </Group>
 
-        {/* Sign out */}
-        <Group>
-          <ListRow icon="solar:logout-3-linear" label="Sign out" danger onPress={() => setConfirmOut(true)} last />
-        </Group>
+          {/* Account */}
+          <Group label="Account">
+            <ListRow icon="solar:trash-bin-minimalistic-linear" label="Delete account" onPress={() => router.push('/delete-account' as never)} last />
+          </Group>
 
-        <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing['2xl'] }}>
-          ETICO — by Moneta Capital Investment Limited
-        </Text>
-        <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs }}>
-          v1.0.0
-        </Text>
+          {/* Sign out */}
+          <Group>
+            <ListRow icon="solar:logout-3-linear" label="Sign out" danger onPress={() => setConfirmOut(true)} last />
+          </Group>
+
+          <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing['2xl'] }}>
+            ETICO — by Moneta Capital Investment Limited
+          </Text>
+          <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs }}>
+            v1.0.0
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Sign-out confirmation sheet */}
@@ -202,10 +238,28 @@ function ListRow({ icon, label, status, value, onPress, danger, last }: {
   )
 }
 
+// Black header behind the avatar — placeholder until the animation lands.
+const HEADER_BG = '#000000'
+const OVERSCROLL_PAD = 600
+
+// Function (not a module-level object) so the colors proxy is read per render
+// and dark mode stays correct.
+const sheetStyle = () => ({
+  flexGrow: 1,
+  backgroundColor: colors.bg,
+  borderTopLeftRadius: 28,
+  borderTopRightRadius: 28,
+  paddingTop: spacing.sm,
+  paddingBottom: TAB_BAR_CLEARANCE + spacing.lg + OVERSCROLL_PAD,
+  marginBottom: -OVERSCROLL_PAD,
+})
+
 const avatarStyle = {
-  width: 72,
-  height: 72,
-  borderRadius: 36,
+  width: 84,
+  height: 84,
+  borderRadius: 42,
+  borderWidth: 3,
+  borderColor: 'rgba(255,255,255,0.14)',
   backgroundColor: colors.brand,
   alignItems: 'center' as const,
   justifyContent: 'center' as const,
