@@ -8,6 +8,8 @@ import { useAuthStore } from '@/store/authStore'
 import { Text, Button, Icon, toast } from '@/ui'
 import { colors, spacing, radii, useThemeStore, resolveScheme } from '@/theme'
 import { useNotificationStore } from '@/store/notificationStore'
+import LightRays from '@/components/LightRays'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -46,9 +48,15 @@ export default function AccountScreen() {
   // Light status-bar text over the black header while this tab is visible;
   // restore the theme's style when leaving (tabs stay mounted).
   const mode = useThemeStore((st) => st.mode)
+  // Tabs stay mounted: animate the header rays only while Account is visible.
+  const [focused, setFocused] = useState(true)
   useFocusEffect(useCallback(() => {
+    setFocused(true)
     setStatusBarStyle('light')
-    return () => setStatusBarStyle(resolveScheme(mode) === 'dark' ? 'light' : 'dark')
+    return () => {
+      setFocused(false)
+      setStatusBarStyle(resolveScheme(mode) === 'dark' ? 'light' : 'dark')
+    }
   }, [mode]))
 
   const unread = useNotificationStore((st) => {
@@ -63,7 +71,21 @@ export default function AccountScreen() {
         {/* ── Header (black). Animation slot: render the background animation
             as the FIRST child of this View with StyleSheet.absoluteFill — the
             content below sits on top of it. ── */}
-        <View style={{ backgroundColor: HEADER_BG, paddingBottom: spacing['2xl'] }}>
+        <View style={{ backgroundColor: HEADER_BG, paddingBottom: spacing['2xl'], overflow: 'hidden' }}>
+          {/* Gold light rays behind the header content. ErrorBoundary: if the
+              GPU shader fails on some device the header just stays black. */}
+          <ErrorBoundary>
+            <LightRays
+              raysOrigin="top-center"
+              raysColor="#EAB308"
+              raysSpeed={3}
+              lightSpread={0.8}
+              rayLength={1.2}
+              noiseAmount={0.1}
+              distortion={0.05}
+              paused={!focused}
+            />
+          </ErrorBoundary>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.md, height: 56 }}>
             <View style={{ width: 40 }} />
             <Text style={{ color: '#FFFFFF', fontSize: 17, lineHeight: 22, fontWeight: '700' }}>Account</Text>
