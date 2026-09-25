@@ -14,7 +14,7 @@ import { ToastHost, Loader } from '@/ui'
 import { BrandSplash } from '@/components/BrandSplash'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import * as Notifications from 'expo-notifications'
-import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome, maybeNotifyAccountEvents } from '@/lib/pushNotifications'
+import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome } from '@/lib/pushNotifications'
 import { useShallow } from 'zustand/react/shallow'
 
 const LOGIN_ROUTES = new Set(['welcome', 'login', 'register', 'reset'])
@@ -179,18 +179,24 @@ export default function RootLayout() {
       const route = (res.notification.request.content.data as { route?: string })?.route
       if (route) router.push(route as never)
     })
-    return () => sub.remove()
+    // A server push arrived while the app is open → pull it into the list now.
+    const recv = Notifications.addNotificationReceivedListener(() => {
+      useNotificationStore.getState().refreshServer(true)
+    })
+    return () => { sub.remove(); recv.remove() }
   }, [router])
 
-  // Fire one-time account-event notifications (e.g. CSCS assigned) when status
-  // transitions. Wallet funding credit/debit alerts will join this once PAC
-  // funding is wired.
-  const kycStatus = useAuthStore((s) => s.kycStatus)
-  const cacsStatus = useAuthStore((s) => s.cacsStatus)
-  const cacsRejectionReason = useAuthStore((s) => s.cacsRejectionReason)
+  // Register this device for server push whenever someone signs in (the
+  // launch-time call runs before login, so it used to register nothing).
+  const userId = useAuthStore((s) => s.user?.id ?? null)
   useEffect(() => {
-    maybeNotifyAccountEvents({ kycStatus, cacsStatus, cacsRejectionReason })
-  }, [kycStatus, cacsStatus, cacsRejectionReason])
+    if (!userId) return
+    registerPushTokenAsync()
+    useNotificationStore.getState().refreshServer(true)
+  }, [userId])
+
+  // CSCS approved/rejected, deposits and wallet funding are pushed by the
+  // server to every signed-in device (see public.notifications) — no local copy.
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))

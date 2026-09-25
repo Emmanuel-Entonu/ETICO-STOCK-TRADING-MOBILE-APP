@@ -25,8 +25,8 @@ let setupDone = false
 /**
  * One-time setup: Android channel + permission request. Safe to call on every
  * app start. Local notifications (trade confirmations) work after this with no
- * server or FCM. Remote push (fills while the app is closed) additionally needs
- * FCM credentials + a backend — see registerPushTokenAsync.
+ * server. Remote push (account + money events from the server) additionally
+ * needs registerPushTokenAsync after sign-in.
  */
 export async function setupNotifications(): Promise<boolean> {
   if (setupDone) return true
@@ -63,12 +63,11 @@ export async function notifyTrade(opts: {
   orderId?: string | null
 }): Promise<void> {
   try {
-    const verb = opts.side === 'BUY' ? 'Bought' : 'Sold'
-    const amount = naira(opts.total)
+    const verb = opts.side === 'BUY' ? 'Buy' : 'Sell'
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `${verb} ${opts.qty.toLocaleString()} ${opts.symbol}`,
-        body: `Your ${opts.side.toLowerCase()} order for ${amount} was placed successfully.`,
+        title: `${verb} order placed: ${opts.symbol}`,
+        body: `${opts.qty.toLocaleString()} ${opts.symbol} for ${naira(opts.total)}. We'll let you know when it fills.`,
         data: opts.orderId ? { route: `/receipt/${opts.orderId}` } : { route: '/notifications' },
       },
       trigger: null, // immediate
@@ -79,17 +78,18 @@ export async function notifyTrade(opts: {
 }
 
 /**
- * Schedule a recurring "the NGX is open" reminder for each weekday at 09:00
- * local time. Idempotent: clears any previously-scheduled market-open
- * reminders first so we don't stack duplicates on every launch.
+ * Weekday 09:00 "the NGX is open" reminder (local time; NGX trades 09:00–14:30
+ * WAT). Idempotent: cancels every earlier market reminder first.
+ *
+ * BUG FIXED: triggers used to be `{ weekday, hour, minute, repeats, channelId }`
+ * with no `type`. expo-notifications 57 only recognises a scheduled trigger by
+ * its `type`, so that object fell through to an IMMEDIATE notification — every
+ * launch fired all 10 market reminders at once (the "11 notifications as soon
+ * as I open the app"). Now: explicit WEEKLY triggers, and only the open reminder
+ * (the close reminder was noise).
  */
 export async function scheduleMarketReminders(): Promise<void> {
   try {
-    // Clear any previously-scheduled market reminders first so we never stack
-    // duplicates. Match on BOTH the `kind` tag AND the titles — older builds
-    // scheduled these without the tag, so a tag-only sweep left them behind and
-    // the user accumulated several identical alerts (the reported "sent ~5
-    // times"). Matching the titles reclaims those too.
     const all = await Notifications.getAllScheduledNotificationsAsync()
     for (const n of all) {
       const kind = (n.content?.data as { kind?: string } | undefined)?.kind
@@ -99,25 +99,19 @@ export async function scheduleMarketReminders(): Promise<void> {
         await Notifications.cancelScheduledNotificationAsync(n.identifier)
       }
     }
-    // NGX trades weekdays 09:00–14:30 WAT. expo weekday: 1=Sunday … 7=Saturday,
-    // so Mon–Fri = 2..6. One open reminder (09:00) + one close reminder (14:30)
-    // per weekday, all repeating.
+    // expo weekday: 1=Sunday … 7=Saturday → Mon–Fri = 2..6.
     for (const weekday of [2, 3, 4, 5, 6]) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'The NGX is open',
-          body: 'The Nigerian Exchange is now open for trading. Review your picks and place your orders.',
+          body: 'The Nigerian Exchange is open for trading until 2:30pm.',
           data: { kind: 'market-open', route: '/(app)/market' },
         },
-        trigger: { weekday, hour: 9, minute: 0, repeats: true, channelId: CHANNEL_ID },
-      })
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'The NGX has closed',
-          body: 'Trading is closed for today (it reopens 09:00 WAT on the next business day). Any pending orders carry over.',
-          data: { kind: 'market-close', route: '/(app)/market' },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+          weekday, hour: 9, minute: 0,
+          ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
         },
-        trigger: { weekday, hour: 14, minute: 30, repeats: true, channelId: CHANNEL_ID },
       })
     }
   } catch (e) {
@@ -151,11 +145,11 @@ export async function notifyOrderFilled(opts: {
   side: 'BUY' | 'SELL'; symbol: string; qty: number; total: number; orderId?: string | null
 }): Promise<void> {
   try {
-    const verb = opts.side === 'BUY' ? 'buy' : 'sell'
+    const verb = opts.side === 'BUY' ? 'bought' : 'sold'
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `Order filled: ${opts.symbol}`,
-        body: `Your ${verb} of ${opts.qty.toLocaleString()} ${opts.symbol} filled at ${naira(opts.total)}.`,
+        body: `You ${verb} ${opts.qty.toLocaleString()} ${opts.symbol} for ${naira(opts.total)}.`,
         data: opts.orderId ? { route: `/receipt/${opts.orderId}` } : { route: '/notifications' },
       },
       trigger: null,
@@ -165,89 +159,44 @@ export async function notifyOrderFilled(opts: {
   }
 }
 
-/** Alert when the user's CSCS/CACS account is approved. */
-async function notifyCscsAssigned(): Promise<void> {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Your CSCS account is ready',
-      body: 'Your CSCS/CACS setup is complete. You can now trade on the NGX.',
-      data: { route: '/(app)' },
-    },
-    trigger: null,
-  })
-}
-
-// Reviewer stores rejection reasons joined by " • "; show just the first.
-function firstReason(reason?: string | null): string {
-  const first = (reason ?? '').split('•').map(s => s.trim()).filter(Boolean)[0]
-  return first ?? ''
-}
-
-/** Alert when the user's CSCS/CACS review was rejected. */
-async function notifyCscsRejected(reason?: string | null): Promise<void> {
-  const r = firstReason(reason)
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'CSCS verification needs attention',
-      body: r
-        ? `Your CSCS review couldn't be approved: ${r}. Tap to redo your KYC.`
-        : "Your CSCS review couldn't be approved. Tap to fix it and redo your KYC.",
-      data: { route: '/(auth)/kyc' },
-    },
-    trigger: null,
-  })
-}
+// CSCS approved / rejected, deposit received and wallet funded are sent by the
+// SERVER (public.notifications + Expo push to every device on the account), so
+// the app no longer raises its own copies — that would double-notify.
 
 /**
- * Fire a tray notification when the CSCS review status TRANSITIONS to approved
- * or rejected — never on every foreground/login. We persist the last CSCS
- * status we reacted to; a notification only fires when the current status
- * differs from it. This naturally handles a redo (rejected → pending → rejected
- * re-notifies) without spamming.
+ * Register THIS device for remote push. Stored server-side in push_tokens (one
+ * row per device) via the register_push_token RPC, so account events reach every
+ * device the user is signed in on. Call after sign-in; safe to call repeatedly.
  */
-export async function maybeNotifyAccountEvents(status: {
-  kycStatus?: string | null
-  cacsStatus?: string | null
-  cacsRejectionReason?: string | null
-}): Promise<void> {
-  try {
-    const cacs = status.cacsStatus ?? null
-    if (!cacs) return
-    const KEY = 'notif:cscs-last'
-    const last = await AsyncStorage.getItem(KEY)
-    if (cacs === last) return                 // no change → no notification
-    if (cacs === 'approved')      await notifyCscsAssigned()
-    else if (cacs === 'rejected') await notifyCscsRejected(status.cacsRejectionReason)
-    // Record every status (incl. pending/not_submitted) so we only fire on real
-    // transitions into approved/rejected, and a later re-rejection still fires.
-    await AsyncStorage.setItem(KEY, cacs)
-  } catch (e) {
-    console.warn('[push] account events failed:', (e as Error).message)
-  }
-}
-
-/**
- * Best-effort Expo push-token registration so a backend can later push for
- * events that happen while the app is closed (order fills, T+3 settlement).
- * On Android this needs FCM configured; until then it throws and we no-op.
- * The token is stored on the user's profile for the server to use.
- */
+const TOKEN_KEY = 'push:token'
 export async function registerPushTokenAsync(): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    // getExpoPushTokenAsync needs the EAS projectId. Pass it explicitly when
-    // set via env; otherwise the SDK reads it from app.json extra.eas.projectId
-    // (written by `eas init`). Requires google-services.json + FCM creds to
-    // actually mint a token on Android.
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return
+    const perm = await Notifications.getPermissionsAsync()
+    if (perm.status !== 'granted') return
     const tokenRes = await Notifications.getExpoPushTokenAsync(
       config.easProjectId ? { projectId: config.easProjectId } : undefined,
     )
     const token = tokenRes.data
     if (!token) return
-    await supabase.from('profiles').update({ push_token: token }).eq('id', user.id)
+    const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: Platform.OS })
+    if (error) throw error
+    await AsyncStorage.setItem(TOKEN_KEY, token)
   } catch (e) {
-    // Expected until FCM credentials are set up — safe to ignore for now.
-    console.warn('[push] token registration skipped:', (e as Error).message)
+    console.warn('[push] token registration failed:', (e as Error).message)
+  }
+}
+
+/** Sign-out: stop this device receiving the account's pushes. Call BEFORE the
+ *  session is cleared (the RPC needs the user's JWT). */
+export async function unregisterPushTokenAsync(): Promise<void> {
+  try {
+    const token = await AsyncStorage.getItem(TOKEN_KEY)
+    if (!token) return
+    await supabase.rpc('unregister_push_token', { p_token: token })
+    await AsyncStorage.removeItem(TOKEN_KEY)
+  } catch (e) {
+    console.warn('[push] token unregister failed:', (e as Error).message)
   }
 }

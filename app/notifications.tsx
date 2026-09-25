@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { View, ScrollView, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -23,6 +23,7 @@ function timeAgo(iso: string): string {
 const TYPE_ICON: Record<NotifType, string> = {
   trade: 'solar:chart-2-bold',
   account: 'solar:shield-user-bold',
+  money: 'solar:wallet-money-bold',
   system: 'solar:bell-bold',
 }
 
@@ -30,7 +31,15 @@ export default function NotificationsScreen() {
   const router = useRouter()
   const { pacOrders, loadOrders } = usePortfolioStore(useShallow((s) => ({ pacOrders: s.pacOrders, loadOrders: s.loadOrders })))
   const { pacAccountId, kycStatus, cacsStatus, cacsRejectionReason } = useAuthStore(useShallow((s) => ({ pacAccountId: s.pacAccountId, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, cacsRejectionReason: s.cacsRejectionReason })))
-  const { items, sync, markRead, markAllRead, remove } = useNotificationStore(useShallow((s) => ({ items: s.items, sync: s.sync, markRead: s.markRead, markAllRead: s.markAllRead, remove: s.remove })))
+  const { local, server, dismissed, sync, refreshServer, markRead, markAllRead, remove } = useNotificationStore(useShallow((s) => ({ local: s.items, server: s.server, dismissed: s.dismissed, sync: s.sync, refreshServer: s.refreshServer, markRead: s.markRead, markAllRead: s.markAllRead, remove: s.remove })))
+  // Merge server (account/money) + local (orders) here, memoised — selecting a
+  // freshly-built array from the store would re-render in a loop.
+  const items = useMemo(() => {
+    const hidden = new Set(dismissed)
+    return [...server, ...local].filter(n => !hidden.has(n.id)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 60)
+  }, [server, local, dismissed])
+
+  useEffect(() => { refreshServer(true) }, [])
 
   useEffect(() => {
     if (pacAccountId) loadOrders(pacAccountId).catch(() => {})

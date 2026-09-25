@@ -52,7 +52,10 @@ export default function HomeScreen() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [showAllHoldings, setShowAllHoldings] = useState(false)
   const [hideWealth, setHideWealth] = useState(false)
-  const unreadCount = useNotificationStore(s => s.items.filter(n => !n.read).length)
+  const unreadCount = useNotificationStore(s => {
+    const hidden = new Set(s.dismissed)
+    return [...s.server, ...s.items].filter(n => !n.read && !hidden.has(n.id)).length
+  })
   const syncNotifs = useNotificationStore(s => s.sync)
 
   useEffect(() => { if (pacAccountId) loadPositions(pacAccountId) }, [pacAccountId])

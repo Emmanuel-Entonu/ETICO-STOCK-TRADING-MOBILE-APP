@@ -233,7 +233,10 @@ export default function WalletScreen() {
                 move to their trading wallet. */}
             <View style={styles.vaCard}>
               <Row align="center" justify="space-between">
-                <View>
+                {/* flex:1 + minWidth:0 bound the width so iOS can shrink-to-fit
+                    the amount; without it the text frame and glyphs disagreed
+                    and the amount drew up over the label on iOS. */}
+                <View style={{ flex: 1, minWidth: 0, marginRight: spacing.md }}>
                   <Text variant="eyebrow" tone="muted">VIRTUAL ACCOUNT</Text>
                   <Text style={styles.vaBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                     {naira(vaAvailable)}
@@ -481,6 +484,7 @@ const makeStyles = () => StyleSheet.create({
   },
   vaBalance: {
     fontSize: 28,
+    lineHeight: 36,          // explicit, like balanceValue — required for iOS shrink-to-fit
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -0.5,

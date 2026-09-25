@@ -176,7 +176,7 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   naira: {
-    fontSize: 26, fontWeight: '900', color: colors.textMuted, marginRight: spacing.sm,
+    fontSize: 26, lineHeight: 34, fontWeight: '900', color: colors.textMuted, marginRight: spacing.sm,
   },
   input: {
     flex: 1, fontSize: 30, fontWeight: '900', color: colors.text, paddingVertical: spacing.lg,

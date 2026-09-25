@@ -9,6 +9,7 @@ import { usePinStore } from '@/store/pinStore'
 import { createVirtualAccount, fundWalletFromVa as fundWalletFromVaApi } from '@/lib/monetaApi'
 import { getAccountById } from '@/lib/pacApi'
 import { config } from '@/lib/config'
+import { unregisterPushTokenAsync } from '@/lib/pushNotifications'
 // NOTE: `usePortfolioStore` is imported lazily inside `signOut` to avoid a
 // module-load circular import (portfolioStore already imports this file).
 
@@ -164,6 +165,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // still populated at that point, the next user (or the login screen
     // itself) can briefly see the previous user's positions / cash / KYC
     // status.
+    // Stop this device receiving the account's pushes — must run while the
+    // session is still valid (the RPC needs the JWT). Then drop the local
+    // notification list so the next person on this phone doesn't see it.
+    await unregisterPushTokenAsync()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useNotificationStore } = require('@/store/notificationStore') as typeof import('@/store/notificationStore')
+    useNotificationStore.getState().reset()
     usePinStore.getState().lock()
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { usePortfolioStore } = require('@/store/portfolioStore') as typeof import('@/store/portfolioStore')
