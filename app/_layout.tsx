@@ -13,9 +13,13 @@ import { useThemeStore, resolvePalette, resolveScheme, setActivePalette, colors 
 import { ToastHost, Loader } from '@/ui'
 import { BrandSplash } from '@/components/BrandSplash'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
+import { installGlGuard } from '@/lib/glGuard'
 import * as Notifications from 'expo-notifications'
 import { setupNotifications, registerPushTokenAsync, scheduleMarketReminders, maybeNotifyWelcome } from '@/lib/pushNotifications'
 import { useShallow } from 'zustand/react/shallow'
+
+// Contain expo-gl / three.js lifecycle errors (Beams) instead of crashing.
+installGlGuard()
 
 const LOGIN_ROUTES = new Set(['welcome', 'login', 'register', 'reset'])
 

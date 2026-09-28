@@ -9,10 +9,11 @@
 // (valleys get a brand-green wash) over a near-black card.
 
 import { forwardRef, useImperativeHandle, useEffect, useRef, useMemo, useState, type FC, type ReactNode } from 'react'
-import { View, StyleSheet, AppState } from 'react-native'
+import { View, StyleSheet, AppState, Animated, Easing } from 'react-native'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber/native'
 import { degToRad } from 'three/src/math/MathUtils.js'
+import { useGlHealth, rebuildDelay } from '@/lib/glGuard'
 
 type UniformValue = THREE.IUniform<unknown> | unknown
 
@@ -91,13 +92,32 @@ const CanvasWrapper: FC<{ children: ReactNode; backgroundColor: string; style?: 
   backgroundColor,
   style,
   paused,
-}) => (
-  <View style={[StyleSheet.absoluteFill, { backgroundColor }, style]}>
-    <Canvas frameloop={paused ? 'never' : 'always'} camera={{ position: [0, 0, 20], fov: 30 }} style={{ flex: 1 }}>
-      {children}
-    </Canvas>
-  </View>
-)
+}) => {
+  // Fade the GL canvas in once three.js has its first frame, instead of the
+  // beams popping in over the card after the GL context spins up.
+  const opacity = useRef(new Animated.Value(0)).current
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor }, style]}>
+      <Animated.View style={{ flex: 1, opacity }}>
+        <Canvas
+          frameloop={paused ? 'never' : 'always'}
+          camera={{ position: [0, 0, 20], fov: 30 }}
+          style={{ flex: 1 }}
+          onCreated={({ gl }) => {
+            // three.js reads the shader/program info log on first use when this
+            // is on; expo-gl can return undefined there on a stale context and
+            // it crashed the app ('trim' of undefined). Shaders are fixed and
+            // known-good, so skip the check (also saves GPU round-trips).
+            gl.debug.checkShaderErrors = false
+            Animated.timing(opacity, { toValue: 1, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
+          }}
+        >
+          {children}
+        </Canvas>
+      </Animated.View>
+    </View>
+  )
+}
 
 const hexToNormalizedRGB = (hex: string): [number, number, number] => {
   const clean = hex.replace('#', '')
@@ -231,6 +251,35 @@ const Beams: FC<BeamsProps> = ({
   }, [])
   const halted = paused || !appActive
 
+  // Only create the GL surface once the card is on screen, the app is active
+  // and the card has a real size: creating it mid-transition / in background
+  // is exactly when expo-gl handed three.js a missing context. After that it
+  // stays mounted for good (tabs never detach), so Home never rebuilds it.
+  const [sized, setSized] = useState(false)
+  const [armed, setArmed] = useState(false)
+  useEffect(() => { if (!armed && sized && !halted) setArmed(true) }, [armed, sized, halted])
+
+  // Self-heal: if a GL error is ever contained (glGuard), drop this canvas and
+  // build a fresh one after a short backoff, then it fades back in.
+  const errorsInWindow = useGlHealth((s) => s.errorsInWindow)
+  const [generation, setGeneration] = useState(0)
+  const [rebuilding, setRebuilding] = useState(false)
+  const [backoffDone, setBackoffDone] = useState(false)
+  const seenErrors = useRef(0)
+  useEffect(() => {
+    if (errorsInWindow <= seenErrors.current) { seenErrors.current = errorsInWindow; return }
+    seenErrors.current = errorsInWindow
+    setRebuilding(true)
+    setBackoffDone(false)
+    const t = setTimeout(() => setBackoffDone(true), rebuildDelay(errorsInWindow))
+    return () => clearTimeout(t)
+  }, [errorsInWindow])
+  // Rebuild only once the backoff passed AND Home is visible in an active app
+  // (never create a GL surface in the background — iOS kills apps for that).
+  useEffect(() => {
+    if (rebuilding && backoffDone && !halted) { setGeneration((g) => g + 1); setRebuilding(false) }
+  }, [rebuilding, backoffDone, halted])
+
   const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>>(null!)
 
   const beamMaterial = useMemo(
@@ -289,8 +338,17 @@ const Beams: FC<BeamsProps> = ({
     [beamColor, speed, noiseIntensity, scale],
   )
 
+  if (!armed || rebuilding) {
+    return (
+      <View
+        style={[StyleSheet.absoluteFill, { backgroundColor }, style]}
+        onLayout={(e) => { if (e.nativeEvent.layout.width > 0 && e.nativeEvent.layout.height > 0) setSized(true) }}
+      />
+    )
+  }
+
   return (
-    <CanvasWrapper backgroundColor={backgroundColor} style={style} paused={halted}>
+    <CanvasWrapper key={generation} backgroundColor={backgroundColor} style={style} paused={halted}>
       <group rotation={[0, 0, degToRad(rotation)]}>
         <PlaneNoise ref={meshRef} material={beamMaterial} count={beamNumber} width={beamWidth} height={beamHeight} />
         <DirLight color={lightColor} position={[0, 3, 10]} />

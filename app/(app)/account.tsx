@@ -83,7 +83,7 @@ export default function AccountScreen() {
           {/* Emerald + gold shard stream behind the header content (React Bits
               AeroShards, ported to Skia). ErrorBoundary: if the GPU draw fails
               on some device the header just stays black. */}
-          <ErrorBoundary>
+          <ErrorBoundary retry>
             <AeroShards
               shardColor="#10B981"
               accentColor="#EAB308"

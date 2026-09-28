@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { View, ScrollView, Pressable, RefreshControl } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
@@ -55,6 +56,7 @@ export default function WatchlistScreen() {
           <Button title="Browse market" size="sm" fullWidth={false} onPress={() => router.push('/(app)/market')} />
         </View>
       ) : (
+        <Animated.View entering={FadeIn.duration(220)} style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing['3xl'] }}
           showsVerticalScrollIndicator={false}
@@ -100,6 +102,7 @@ export default function WatchlistScreen() {
             })}
           </Stack>
         </ScrollView>
+        </Animated.View>
       )}
     </SafeAreaView>
   )

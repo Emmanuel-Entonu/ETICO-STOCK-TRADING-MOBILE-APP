@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { View, FlatList, Pressable, RefreshControl } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { usePortfolioStore } from '@/store/portfolioStore'
@@ -53,6 +54,7 @@ export default function OrdersHistoryScreen() {
       {loadingOrders && pacOrders.length === 0 ? (
         <SkeletonList rows={8} />
       ) : (
+        <Animated.View entering={FadeIn.duration(220)} style={{ flex: 1 }}>
         <FlatList
           data={pacOrders}
           keyExtractor={(o) => o.id}
@@ -76,6 +78,7 @@ export default function OrdersHistoryScreen() {
             </View>
           }
         />
+        </Animated.View>
       )}
     </SafeAreaView>
   )

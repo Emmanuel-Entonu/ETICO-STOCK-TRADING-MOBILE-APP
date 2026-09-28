@@ -1,0 +1,51 @@
+diff --git a/node_modules/expo-gl/build/GLView.js b/node_modules/expo-gl/build/GLView.js
+index 3bd33ef..ec0845f 100644
+--- a/node_modules/expo-gl/build/GLView.js
++++ b/node_modules/expo-gl/build/GLView.js
+@@ -79,14 +79,32 @@ export class GLView extends React.Component {
+         }
+         this.nativeRef = nativeRef;
+     };
++    // ETICO patch: on Android the native "surface created" event can arrive a
++    // frame or two before the JSI context object for that id is registered on
++    // global.__EXGLContexts. Upstream then called configureLogging(undefined)
++    // and crashed the app ("Cannot set property '__expoSetLogging' of
++    // undefined"). Wait for the context (up to ~1s, frame by frame) instead,
++    // and give up quietly if the view unmounts meanwhile.
+     _onSurfaceCreate = ({ nativeEvent: { exglCtxId } }) => {
+-        const gl = getGl(exglCtxId);
+         this.exglCtxId = exglCtxId;
+-        if (this.props.onContextCreate) {
+-            this.props.onContextCreate(gl);
+-        }
++        let tries = 0;
++        const attach = () => {
++            if (this._unmounted) return;
++            const gl = global.__EXGLContexts && global.__EXGLContexts[String(exglCtxId)];
++            if (!gl) {
++                if (++tries < 60) requestAnimationFrame(attach);
++                else console.warn(`[expo-gl] context ${exglCtxId} never became available`);
++                return;
++            }
++            configureLogging(gl);
++            if (this.props.onContextCreate) {
++                this.props.onContextCreate(gl);
++            }
++        };
++        attach();
+     };
+     componentWillUnmount() {
++        this._unmounted = true;
+         if (this.exglCtxId) {
+             unregisterGLContext(this.exglCtxId);
+         }
+@@ -142,7 +160,8 @@ const getGl = (exglCtxId) => {
+         throw new CodedError('ERR_GL_NOT_AVAILABLE', 'GL is currently not available. (Have you enabled remote debugging? GL is not available while debugging remotely.)');
+     }
+     const gl = global.__EXGLContexts[String(exglCtxId)];
+-    configureLogging(gl);
++    // ETICO patch: never configure a context that isn't there yet.
++    if (gl) configureLogging(gl);
+     return gl;
+ };
+ const getContextId = (exgl) => {

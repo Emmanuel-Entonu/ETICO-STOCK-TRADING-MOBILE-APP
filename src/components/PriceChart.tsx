@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Dimensions } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { MotiView } from 'moti'
 import * as Haptics from 'expo-haptics'
 import Svg, { Path } from 'react-native-svg'
@@ -170,7 +171,7 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
   const shownDate = new Date(shown.t).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <View style={styles.wrap}>
+    <Animated.View entering={FadeIn.duration(220)} style={styles.wrap}>
       <Row justify="space-between" align="center" style={{ marginBottom: spacing.md }}>
         <View>
           <Text variant="bodyStrong">{naira(shown.c, { fractionDigits: 2 })}</Text>
@@ -190,7 +191,7 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
         <Text variant="small" tone="subtle">Touch and slide to see a day</Text>
         <Text variant="small" tone="subtle">NGX · daily close</Text>
       </Row>
-    </View>
+    </Animated.View>
   )
 }
 

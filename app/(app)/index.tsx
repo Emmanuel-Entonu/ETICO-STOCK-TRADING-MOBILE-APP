@@ -141,19 +141,10 @@ export default function HomeScreen() {
           >
             {/* Animated Beams (three.js). Gold directional light makes the beams
                 glow gold; a green ambient washes the valleys so the brand green
-                stays present on the near-black card. Wrapped in an ErrorBoundary
-                so a shader failure on a weak GPU falls back to a gold→green
-                gradient instead of crashing Home. */}
-            <ErrorBoundary
-              fallback={
-                <LinearGradient
-                  colors={['#DAA92F', '#3A4429', '#0D0E0B']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              }
-            >
+                stays present on the near-black card. Self-healing: a render
+                throw remounts Beams fresh after a short backoff (ErrorBoundary
+                retry); GL-lifecycle errors are handled inside Beams (glGuard). */}
+            <ErrorBoundary retry fallback={<View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B0C08' }]} />}>
               <Beams
                 paused={!focused}
                 beamWidth={2}
