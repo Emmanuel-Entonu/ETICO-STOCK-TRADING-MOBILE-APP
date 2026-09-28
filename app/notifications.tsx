@@ -34,10 +34,9 @@ export default function NotificationsScreen() {
   const { local, server, dismissed, sync, refreshServer, markRead, markAllRead, remove } = useNotificationStore(useShallow((s) => ({ local: s.items, server: s.server, dismissed: s.dismissed, sync: s.sync, refreshServer: s.refreshServer, markRead: s.markRead, markAllRead: s.markAllRead, remove: s.remove })))
   // Merge server (account/money) + local (orders) here, memoised — selecting a
   // freshly-built array from the store would re-render in a loop.
-  const items = useMemo(() => {
-    const hidden = new Set(dismissed)
-    return [...server, ...local].filter(n => !hidden.has(n.id)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 60)
-  }, [server, local, dismissed])
+  // Same merged list the badges count (store.all()), so they always agree.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const items = useMemo(() => useNotificationStore.getState().all(), [server, local, dismissed])
 
   useEffect(() => { refreshServer(true) }, [])
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View, FlatList, Pressable, TextInput, StyleSheet, ScrollView } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { RISK_GROUPS, RISK_META } from '@/lib/riskGroups'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { Text, Row, Icon } from '@/ui'
@@ -48,25 +49,10 @@ const PHARMA   = new Set(['FIDSON', 'MAYBAKER', 'NEIMETH', 'EKOCORP', 'MORISON',
 //   LOW    — mega-cap blue-chips: proven moats, stable, dividend payers.
 //   MEDIUM — large-cap growth / industrials / pharma.
 //   HIGH   — small/mid-cap, commodity-exposed or speculative names.
-const RISK_LOW = new Set([
-  'DANGCEM', 'BUACEMENT', 'MTNN', 'AIRTELAFRI', 'NESTLE', 'UNILEVER',
-  'BUAFOODS', 'PZ', 'DANGSUGAR', 'NASCON', 'SEPLAT', 'GEREGU',
-  'PRESCO', 'OKOMUOIL', 'JAIZBANK',
-])
-const RISK_MEDIUM = new Set([
-  'HBMN', 'UACN', 'CADBURY', 'HONYFLOUR', 'TRANSPOWER', 'FIDSON', 'MAYBAKER',
-  'MECURE', 'CAP', 'BERGER', 'VITAFOAM', 'CUTIX', 'NAHCO', 'SAHCO',
-  'CAVERTON', 'REDSTAREX', 'CONOIL', 'TOTAL', 'MRS', 'ETERNA', 'ARADEL',
-  'NGXGROUP', 'CWG', 'LOTUSHAL15',
-])
-const RISK_HIGH = new Set([
-  'OANDO', 'JAPAULGOLD', 'NEIMETH', 'EKOCORP', 'MORISON', 'JULI', 'IMG',
-  'PREMPAINTS', 'BETAGLAS', 'SMURFIT', 'MULTIVERSE', 'NOTORE', 'ENAMELWA',
-  'NNFM', 'MCNICHOLS', 'MULTITREX', 'UPL', 'LEARNAFRCA', 'ACADEMY',
-  'THOMASWY', 'TRIPPLEG', 'CHAMS', 'ETRANZACT', 'NCR', 'NSLTECH',
-  'DAARCOMM', 'TIP', 'CILEASING', 'JOHNHOLT', 'LIVESTOCK', 'FTNCOCOA',
-  'ZICHIS', 'CNIF', 'NIDF', 'NREIT', 'UHOMEREIT', 'ABCTRANS', 'TRANSEXPR',
-])
+// Risk buckets now live in @/lib/riskGroups (shared with the Invest risk dial).
+const RISK_LOW = RISK_GROUPS.low
+const RISK_MEDIUM = RISK_GROUPS.medium
+const RISK_HIGH = RISK_GROUPS.high
 
 type FilterMode = 'all' | 'ethical'
 type RiskLevel  = 'low' | 'medium' | 'high'
@@ -74,7 +60,7 @@ type RiskLevel  = 'low' | 'medium' | 'high'
 export default function MarketScreen() {
   const styles = useThemedStyles(makeStyles)
   const router = useRouter()
-  const params = useLocalSearchParams<{ filter?: string; risk?: string }>()
+  const params = useLocalSearchParams<{ filter?: string; risk?: string; search?: string }>()
   const filterMode: FilterMode = params.filter === 'ethical' ? 'ethical' : 'all'
 
   // Build a "return to this exact page" URL for the trade screen to bounce
@@ -120,9 +106,7 @@ export default function MarketScreen() {
     return list
   }, [universe, category, query])
 
-  const title    = risk === 'low'    ? 'Low-risk mix'
-                 : risk === 'medium' ? 'Medium-risk mix'
-                 : risk === 'high'   ? 'High-risk mix'
+  const title    = risk ? `${RISK_META[risk].label} stocks`
                  : filterMode === 'ethical' ? 'Ethical Stocks'  : 'NGX Stocks'
 
   return (
@@ -171,6 +155,8 @@ export default function MarketScreen() {
                   autoCapitalize="characters"
                   autoCorrect={false}
                   returnKeyType="search"
+                  // Invest page's search button opens the market with ?search=1.
+                  autoFocus={params.search === '1'}
                 />
                 {query.length > 0 && (
                   <Pressable onPress={() => setQuery('')} hitSlop={8}>

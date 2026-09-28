@@ -159,6 +159,66 @@ export async function notifyOrderFilled(opts: {
   }
 }
 
+/**
+ * KYC push reminders, kept in step with the account's KYC state (call on every
+ * profile load):
+ *  • not started / skipped → one series of reminders at +1, +3 and +7 days
+ *    (a new series at most every 14 days, so it never nags daily).
+ *  • rejected → a "redo your KYC" reminder 2 days out. The rejection itself is
+ *    pushed by the server the moment the reviewer decides, so no copy here.
+ *  • submitted / approved → all KYC reminders cancelled.
+ */
+const KYC_KINDS = ['kyc-reminder', 'kyc-redo']
+export async function syncKycReminders(userId: string, kycStatus: string | null | undefined, cacsStatus: string | null | undefined): Promise<void> {
+  try {
+    const notStarted = !kycStatus || kycStatus === 'pending' || kycStatus === 'skipped'
+    const rejected = cacsStatus === 'rejected' || kycStatus === 'rejected'
+    const want = rejected ? 'kyc-redo' : notStarted ? 'kyc-reminder' : null
+
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync()
+    const ours = scheduled.filter((n) => KYC_KINDS.includes((n.content?.data as { kind?: string } | undefined)?.kind ?? ''))
+    // Drop reminders that no longer fit the current state.
+    for (const n of ours) {
+      if ((n.content?.data as { kind?: string }).kind !== want) await Notifications.cancelScheduledNotificationAsync(n.identifier)
+    }
+    if (!want || ours.some((n) => (n.content?.data as { kind?: string }).kind === want)) return
+
+    const key = `notif:${want}:${userId}`
+    const last = Number(await AsyncStorage.getItem(key)) || 0
+    const DAY = 86_400
+    if (Date.now() - last < (want === 'kyc-redo' ? 3 : 14) * DAY * 1000) return
+
+    const channel = Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}
+    const series = want === 'kyc-redo'
+      ? [{ at: 2 * DAY, title: 'Finish your verification', body: 'Your account couldn’t be verified yet. Fix the highlighted details and resubmit — it only takes a few minutes.' }]
+      : [
+          { at: 1 * DAY, title: 'Verify your identity to start investing', body: 'It takes about 5 minutes with your BVN. You’ll be able to invest once your account is approved.' },
+          { at: 3 * DAY, title: 'Your ETICO account is almost ready', body: 'Complete your KYC to open your trading account and start building your portfolio.' },
+          { at: 7 * DAY, title: 'Still want to invest ethically?', body: 'Finish verifying your identity — we’ll take it from there.' },
+        ]
+    for (const s of series) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: s.title, body: s.body, data: { kind: want, route: '/(auth)/kyc' } },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: s.at, repeats: false, ...channel },
+      })
+    }
+    await AsyncStorage.setItem(key, String(Date.now()))
+  } catch (e) {
+    console.warn('[push] kyc reminders failed:', (e as Error).message)
+  }
+}
+
+/** Sign-out: this device shouldn't remind the next person about someone else's KYC. */
+export async function cancelKycReminders(): Promise<void> {
+  try {
+    for (const n of await Notifications.getAllScheduledNotificationsAsync()) {
+      if (KYC_KINDS.includes((n.content?.data as { kind?: string } | undefined)?.kind ?? '')) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier)
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 // CSCS approved / rejected, deposit received and wallet funded are sent by the
 // SERVER (public.notifications + Expo push to every device on the account), so
 // the app no longer raises its own copies — that would double-notify.

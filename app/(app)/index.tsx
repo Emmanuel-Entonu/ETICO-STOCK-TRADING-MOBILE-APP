@@ -18,7 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { OrderRow } from '@/components/OrderRow'
 import { RecommendedRail } from '@/components/RecommendedRail'
-import { CscsNotice } from '@/components/CscsNotice'
+import { KycStatusCard } from '@/components/KycStatusCard'
 import { useNotificationStore } from '@/store/notificationStore'
 
 type Tab = 'holdings' | 'orders'
@@ -41,21 +41,18 @@ export default function HomeScreen() {
       cancelOrder: s.cancelOrder, apiStatus: s.apiStatus,
     }))
   )
-  const { user, pacAccountId, kycStatus, cacsStatus, cacsRejectionReason, walletBalance } = useAuthStore(
+  const { user, pacAccountId, kycStatus, cacsStatus, cacsRejectionReason, walletBalance, vaAvailable } = useAuthStore(
     useShallow(s => ({
       user: s.user, pacAccountId: s.pacAccountId,
       kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, cacsRejectionReason: s.cacsRejectionReason,
-      walletBalance: s.walletBalance,
+      walletBalance: s.walletBalance, vaAvailable: s.vaAvailable,
     }))
   )
   const [tab, setTab] = useState<Tab>('holdings')
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [showAllHoldings, setShowAllHoldings] = useState(false)
   const [hideWealth, setHideWealth] = useState(false)
-  const unreadCount = useNotificationStore(s => {
-    const hidden = new Set(s.dismissed)
-    return [...s.server, ...s.items].filter(n => !n.read && !hidden.has(n.id)).length
-  })
+  const unreadCount = useNotificationStore(s => s.unread())
   const syncNotifs = useNotificationStore(s => s.sync)
 
   useEffect(() => { if (pacAccountId) loadPositions(pacAccountId) }, [pacAccountId])
@@ -250,6 +247,16 @@ export default function HomeScreen() {
           </Row>
         </MotiView>
 
+        {/* Primary next step: under ₦500 available (wallet + trading account
+            cash) → load the wallet; otherwise → go invest. */}
+        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
+          {(vaAvailable ?? 0) + (walletBalance ?? 0) < 500 ? (
+            <Button title="Load wallet" onPress={() => router.push('/wallet' as never)} />
+          ) : (
+            <Button title="Invest" onPress={() => router.push('/(app)/invest' as never)} />
+          )}
+        </View>
+
         {/* Recommended (strictly ethical) — biased to sectors you've traded */}
         <RecommendedRail />
 
@@ -268,40 +275,10 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Identity KYC prompt — only until identity is verified. */}
-        {kycStatus !== 'verified' && (
-          <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
-            <Pressable
-              onPress={() => router.push('/(auth)/kyc')}
-              style={({ pressed }) => [
-                styles.setupCard,
-                pressed && { backgroundColor: colors.bgSubtle },
-              ]}
-            >
-              <Row justify="space-between" align="center">
-                <Row gap="md" align="center" style={{ flex: 1 }}>
-                  <View style={styles.setupIconWrap}>
-                    <Icon name="solar:shield-user-bold" size={22} color={colors.brand} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyStrong">Finish setting up</Text>
-                    <Text variant="small" tone="muted" style={{ marginTop: 2 }}>
-                      Verify your identity to unlock trading
-                    </Text>
-                  </View>
-                </Row>
-                <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textMuted} />
-              </Row>
-            </Pressable>
-          </View>
-        )}
-
-        {/* CSCS review status (under review / rejected + redo). Self-gates:
-            renders only when identity KYC is done and CSCS isn't approved.
-            No marginTop here — an empty wrapper must add no gap; the notice
-            card carries its own top spacing when it renders. */}
+        {/* KYC status — one card that matches the user's actual state
+            (not started / skipped / under review / rejected → redo). */}
         <View style={{ paddingHorizontal: spacing.xl }}>
-          <CscsNotice topSpacing />
+          <KycStatusCard style={{ marginTop: spacing.lg }} />
         </View>
 
         {/* Holdings / Orders filter */}
@@ -674,21 +651,6 @@ const makeStyles = () => StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: colors.bgSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  setupCard: {
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSubtle,
-  },
-  setupIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },

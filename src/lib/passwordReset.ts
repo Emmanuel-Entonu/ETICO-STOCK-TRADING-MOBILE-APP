@@ -4,17 +4,22 @@ import { config } from './config'
 // proxy /api/password-reset, which mirrors the web server actions over the
 // shared password_reset_otps table. See Moneta-stock trading Demo/api/password-reset.ts.
 
-// Emails a 6-digit code. Always resolves (never reveals whether the email exists).
-export async function requestPasswordOtp(email: string): Promise<void> {
-  try {
-    await fetch(`${config.proxyBase}/api/password-reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'request', email }),
-    })
-  } catch {
-    // Silent — the user is told "if that email exists, a code was sent".
+// Emails a 6-digit code. Resolves { registered: false } when no ETICO account
+// uses the email (the reset screen says so instead of pretending a code went
+// out). Throws only on a network failure.
+export async function requestPasswordOtp(email: string): Promise<{ registered: boolean }> {
+  const res = await fetch(`${config.proxyBase}/api/password-reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'request', email }),
+  })
+  if (res.status === 404) return { registered: false }
+  if (!res.ok) {
+    let msg = ''
+    try { msg = ((await res.json()) as { error?: string }).error ?? '' } catch { /* non-JSON */ }
+    throw new Error(msg || `Couldn't send the code (${res.status})`)
   }
+  return { registered: true }
 }
 
 // Verifies the code and sets the new password. Throws with a readable message on failure.

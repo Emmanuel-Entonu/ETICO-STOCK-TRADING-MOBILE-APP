@@ -21,15 +21,15 @@ const FAQ: FaqSection[] = [
     items: [
       { q: 'Why hasn’t my order filled yet?', a: 'An order stays pending until the exchange matches it. Common reasons: the NGX is closed (it trades on weekdays, roughly 9:00am to 2:30pm WAT), a limit order’s price has not been reached, or there is not enough matching volume yet. It fills automatically once conditions are met, or you can cancel it from the order’s status page.' },
       { q: 'Market order vs limit order?', a: 'A market order executes immediately at the best available price. A limit order only executes at your chosen price or better, so it may wait, or never fill if the price is not reached.' },
-      { q: 'When do my trades settle?', a: 'Nigerian equities settle on T+3, three business days after the trade. Cash from a sale becomes available to withdraw only after it clears.' },
+      { q: 'When do my trades settle?', a: 'Nigerian equities settle on T+1, one business day after the trade. Cash from a sale becomes available to withdraw only after it clears.' },
       { q: 'What fees do I pay?', a: 'Each trade carries NGX, CSCS, SEC fees and stamp duty, plus ETICO’s brokerage commission. The full breakdown is shown on the confirmation screen before you place a trade, and on every receipt.' },
     ],
   },
   {
     key: 'funding', title: 'Funding & withdrawals', icon: 'solar:wallet-money-bold',
     items: [
-      { q: 'How do I add money?', a: 'You will be given a dedicated virtual account to transfer into. The amount you fund becomes your available balance for buying stocks.' },
-      { q: 'How long do withdrawals take?', a: 'Withdrawals are processed within 24 hours. You can only withdraw cash that has fully settled (see the T+3 settlement note above).' },
+      { q: 'How do I add money?', a: 'You get a dedicated account number to transfer into. The money lands in your Wallet; move what you want into your trading account to buy stocks.' },
+      { q: 'How long do withdrawals take?', a: 'Withdrawals are processed within 24 hours. You can only withdraw cash that has fully settled (see the T+1 settlement note above).' },
     ],
   },
   {

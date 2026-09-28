@@ -5,10 +5,12 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { Text, Icon } from '@/ui'
-import { colors, spacing, radii, useThemedStyles, useEffectiveScheme } from '@/theme'
+import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { isEthical, ETHICAL_TICKERS } from '@/lib/ethicalTickers'
 import { useShallow } from 'zustand/react/shallow'
+import { RiskDial } from '@/components/RiskDial'
+import { RecommendedRail } from '@/components/RecommendedRail'
 
 // Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
@@ -17,49 +19,6 @@ const CARD_IMAGES = {
   bonds:   require('../../assets/asset-icons/card-bonds.png')          as ImageSourcePropType,
   savings: require('../../assets/asset-icons/card-savings.png')        as ImageSourcePropType,
 } as const
-
-interface RiskTone {
-  fg:     string
-  tint:   string
-  accent: string
-  border: string
-}
-
-interface RiskProfile {
-  key:      'low' | 'medium' | 'high'
-  label:    string
-  subtitle: string
-  icon:     string
-  light:    RiskTone
-  dark:     RiskTone
-}
-
-const RISK_PROFILES: RiskProfile[] = [
-  {
-    key: 'low',
-    label: 'Low-risk mix',
-    subtitle: 'Banks · Insurance · Consumer',
-    icon: 'solar:shield-check-bold',
-    light: { fg: '#047857', tint: '#D1FAE5', accent: '#047857', border: '#A7F3D0' },
-    dark:  { fg: '#34D399', tint: '#0F241C', accent: '#059669', border: '#134E3F' },
-  },
-  {
-    key: 'medium',
-    label: 'Medium-risk mix',
-    subtitle: 'Cement · Pharma · Industrial',
-    icon: 'solar:chart-2-bold',
-    light: { fg: '#B45309', tint: '#FEF3C7', accent: '#B45309', border: '#FDE68A' },
-    dark:  { fg: '#FBBF24', tint: '#2A1E0B', accent: '#D97706', border: '#4D3512' },
-  },
-  {
-    key: 'high',
-    label: 'High-risk mix',
-    subtitle: 'Oil & Gas · Volatile & small-caps',
-    icon: 'solar:danger-circle-bold',
-    light: { fg: '#B7161F', tint: '#FEE2E2', accent: '#B7161F', border: '#FECACA' },
-    dark:  { fg: '#F87171', tint: '#2A1213', accent: '#DC2626', border: '#4D1B1E' },
-  },
-]
 
 interface Product {
   key:      keyof typeof CARD_IMAGES
@@ -125,6 +84,15 @@ export default function AssetsScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }}>
         <View style={styles.header}>
           <Text variant="h1">Assets</Text>
+          <Pressable
+            onPress={() => router.push('/(app)/market?search=1' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Search stocks"
+            hitSlop={10}
+            style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Icon name="solar:magnifer-linear" size={22} color={colors.text} />
+          </Pressable>
         </View>
 
         <View style={styles.eyebrowWrap}>
@@ -147,20 +115,26 @@ export default function AssetsScreen() {
           ))}
         </View>
 
-        {/* By risk level — unchanged */}
+        {/* By risk level — one card: Conservative / Balanced / Growth (remembers the last choice) */}
         <View style={styles.riskWrap}>
           <Text variant="eyebrow" tone="muted" style={styles.riskEyebrow}>BY RISK LEVEL</Text>
-          {RISK_PROFILES.map((r, i) => (
-            <MotiView
-              key={`${r.key}-${focusKey}`}
-              from={{ opacity: 0, translateX: -14 }}
-              animate={{ opacity: 1, translateX: 0 }}
-              transition={{ type: 'timing', duration: 320, delay: 360 + i * 90 }}
-              style={{ marginBottom: spacing.md }}
-            >
-              <RiskCard profile={r} onPress={() => router.push(`/(app)/market?risk=${r.key}` as never)} />
-            </MotiView>
-          ))}
+          <MotiView
+            key={`risk-${focusKey}`}
+            from={{ opacity: 0, translateY: 14 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 320, delay: 360 }}
+          >
+            <RiskDial
+              marketData={marketData}
+              onViewAll={(k) => router.push(`/(app)/market?risk=${k}` as never)}
+              onOpenStock={(sym) => router.push(`/trade/${sym}` as never)}
+            />
+          </MotiView>
+        </View>
+
+        {/* Recommended stocks */}
+        <View style={{ marginTop: spacing.lg }}>
+          <RecommendedRail />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -228,65 +202,23 @@ function ProductCard({ product, onPress }: { product: Product; onPress?: () => v
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// RiskCard — unchanged from before.
-// ─────────────────────────────────────────────────────────────
-function RiskCard({ profile, onPress }: { profile: RiskProfile; onPress: () => void }) {
-  const styles = useThemedStyles(makeStyles)
-  const scheme = useEffectiveScheme()
-  const isDark = scheme === 'dark'
-  const tone   = isDark ? profile.dark : profile.light
-  const filled = profile.key === 'low' ? 1 : profile.key === 'medium' ? 2 : 3
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.riskCard,
-        {
-          backgroundColor: isDark ? tone.tint : colors.bgSubtle,
-          borderColor:     isDark ? tone.border : colors.border,
-        },
-        pressed && { transform: [{ scale: 0.98 }] },
-      ]}
-    >
-      {!isDark && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: tone.tint, opacity: 0.55, borderRadius: radii.lg }]} />
-      )}
-      <View style={[styles.riskIconSquare, { backgroundColor: tone.accent }]}>
-        <Icon name={profile.icon} size={22} color="#FFFFFF" />
-      </View>
-      <View style={{ flex: 1, marginLeft: spacing.md }}>
-        <Text style={[styles.riskTitle, { color: tone.fg }]}>{profile.label}</Text>
-        <Text style={[styles.riskSubtitle, isDark && { color: tone.fg, opacity: 0.7 }]} numberOfLines={1}>
-          {profile.subtitle}
-        </Text>
-      </View>
-      <View style={styles.riskMeter}>
-        {[0, 1, 2].map(i => (
-          <View
-            key={i}
-            style={[
-              styles.riskPip,
-              {
-                height: 10 + i * 6,
-                backgroundColor: i < filled ? tone.fg : 'transparent',
-                borderColor: tone.fg,
-                opacity: i < filled ? 1 : 0.4,
-              },
-            ]}
-          />
-        ))}
-      </View>
-    </Pressable>
-  )
-}
-
 const makeStyles = () => StyleSheet.create({
   header: {
     paddingTop: spacing.md,
     paddingBottom: spacing['2xl'],
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtn: {
+    position: 'absolute',
+    right: GRID_H_PADDING,
+    top: spacing.md,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgSubtle,
   },
   eyebrowWrap: {
     width: CONTENT_W,
@@ -366,52 +298,10 @@ const makeStyles = () => StyleSheet.create({
   // ── Risk cards ──
   riskWrap: {
     marginTop: spacing['2xl'],
-    paddingHorizontal: GRID_H_PADDING,
     width: CONTENT_W,
     alignSelf: 'center',
   },
   riskEyebrow: {
     marginBottom: spacing.md,
-  },
-  riskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: colors.bgSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    minHeight: 82,
-  },
-  riskIconSquare: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  riskTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  riskSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginTop: 3,
-    letterSpacing: 0.1,
-  },
-  riskMeter: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-    marginLeft: spacing.md,
-  },
-  riskPip: {
-    width: 6,
-    borderWidth: 1.5,
-    borderRadius: 2,
   },
 })

@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore'
 import { Text, Button, Icon, toast } from '@/ui'
 import { colors, spacing, radii, useThemeStore, resolveScheme } from '@/theme'
 import { useNotificationStore } from '@/store/notificationStore'
-import LightRays from '@/components/LightRays'
+import AeroShards from '@/components/AeroShards'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { useShallow } from 'zustand/react/shallow'
@@ -59,10 +59,7 @@ export default function AccountScreen() {
     }
   }, [mode]))
 
-  const unread = useNotificationStore((st) => {
-    const hidden = new Set(st.dismissed)
-    return [...st.server, ...st.items].filter((n) => !n.read && !hidden.has(n.id)).length
-  })
+  const unread = useNotificationStore((st) => st.unread())
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: HEADER_BG }}>
@@ -72,17 +69,22 @@ export default function AccountScreen() {
             as the FIRST child of this View with StyleSheet.absoluteFill — the
             content below sits on top of it. ── */}
         <View style={{ backgroundColor: HEADER_BG, paddingBottom: spacing['2xl'], overflow: 'hidden' }}>
-          {/* Gold light rays behind the header content. ErrorBoundary: if the
-              GPU shader fails on some device the header just stays black. */}
+          {/* Emerald + gold shard stream behind the header content (React Bits
+              AeroShards, ported to Skia). ErrorBoundary: if the GPU draw fails
+              on some device the header just stays black. */}
           <ErrorBoundary>
-            <LightRays
-              raysOrigin="top-center"
-              raysColor="#EAB308"
-              raysSpeed={3}
-              lightSpread={0.8}
-              rayLength={1.2}
-              noiseAmount={0.1}
-              distortion={0.05}
+            <AeroShards
+              shardColor="#10B981"
+              accentColor="#EAB308"
+              density={1.5}
+              shardSize={1.1}
+              speed={1}
+              spin={1}
+              spread={1}
+              depth={1}
+              stretch={1}
+              glow={1}
+              bloom={0.5}
               paused={!focused}
             />
           </ErrorBoundary>

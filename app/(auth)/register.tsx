@@ -193,7 +193,21 @@ export default function RegisterScreen() {
             />
 
             {formError ? (
-              <Text variant="small" tone="negative" style={{ marginBottom: spacing.md }}>{formError}</Text>
+              <View style={{ marginBottom: spacing.md }}>
+                <Text variant="small" tone="negative">{formError}</Text>
+                {/* One account per email: point them to the right door instead
+                    of a dead end. */}
+                {/already exists/i.test(formError) ? (
+                  <Row gap="lg" style={{ marginTop: spacing.sm }}>
+                    <Pressable onPress={() => router.replace('/(auth)/login')} hitSlop={8}>
+                      <Text variant="smallStrong" tone="accent">Sign in</Text>
+                    </Pressable>
+                    <Pressable onPress={() => router.push({ pathname: '/(auth)/reset', params: { email: email.trim() } } as never)} hitSlop={8}>
+                      <Text variant="smallStrong" tone="accent">Reset password</Text>
+                    </Pressable>
+                  </Row>
+                ) : null}
+              </View>
             ) : null}
 
             <Button title="Create Account" onPress={submit} loading={loading} style={{ marginTop: spacing.sm }} />

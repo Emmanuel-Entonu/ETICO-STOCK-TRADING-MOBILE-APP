@@ -9,11 +9,12 @@ import { usePinStore } from '@/store/pinStore'
 import { createVirtualAccount, fundWalletFromVa as fundWalletFromVaApi } from '@/lib/monetaApi'
 import { getAccountById } from '@/lib/pacApi'
 import { config } from '@/lib/config'
-import { unregisterPushTokenAsync } from '@/lib/pushNotifications'
+import { unregisterPushTokenAsync, syncKycReminders, cancelKycReminders } from '@/lib/pushNotifications'
 // NOTE: `usePortfolioStore` is imported lazily inside `signOut` to avoid a
 // module-load circular import (portfolioStore already imports this file).
 
-type KycStatus  = 'pending' | 'submitted' | 'verified' | 'rejected'
+// 'skipped' = new user chose "Continue without verification" (lands on Home).
+type KycStatus  = 'pending' | 'skipped' | 'submitted' | 'verified' | 'rejected'
 type CacsStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected'
 
 interface AuthState {
@@ -169,6 +170,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // session is still valid (the RPC needs the JWT). Then drop the local
     // notification list so the next person on this phone doesn't see it.
     await unregisterPushTokenAsync()
+    await cancelKycReminders()
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useNotificationStore } = require('@/store/notificationStore') as typeof import('@/store/notificationStore')
     useNotificationStore.getState().reset()
@@ -232,6 +234,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // wallet_balance above is only an instant-paint fallback. The wallet is a
       // mirror of the live PAC cash balance, so pull the real value now.
       if (profile.pac_account_id) get().refreshWalletBalance().catch(() => {})
+      // Keep KYC push reminders in step with the account state.
+      syncKycReminders(user.id, profile.kyc_status, profile.cacs_status)
     } else if (!fetchError || fetchError.code === 'PGRST116') {
       // Create the row for a brand-new user. Must be INSERT-only (DO NOTHING):
       // a plain upsert compiles to INSERT ... ON CONFLICT DO UPDATE, which needs

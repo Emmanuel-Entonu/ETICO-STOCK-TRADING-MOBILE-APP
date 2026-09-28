@@ -235,7 +235,7 @@ export const TERMS_OF_SERVICE: LegalDoc = {
           type: 'bullets',
           items: [
             'Orders you place are routed to our brokerage partner for execution on the NGX. Execution is not guaranteed and depends on market availability, price, and trading hours.',
-            'Trades settle on a T+3 basis in line with NGX and CSCS rules. Securities and cash are held with our licensed partner and the Central Securities Clearing System.',
+            'Trades settle on a T+1 basis in line with NGX and CSCS rules. Securities and cash are held with our licensed partner and the Central Securities Clearing System.',
             'Prices shown in the app may be delayed and are indicative until an order is executed. The executed price is the price that binds.',
             'Once submitted, an order may not be cancellable if it has already been matched or executed.',
           ],

@@ -42,10 +42,19 @@ export default function ResetScreen() {
     const em = validateEmail(email)
     if (!em.ok) { setError(em.error); return }
     setLoading(true); setError(null)
-    await requestPasswordOtp(em.value)   // always resolves (no enumeration)
-    setLoading(false)
-    setResendSec(30)
-    setStage(2)
+    try {
+      const { registered } = await requestPasswordOtp(em.value)
+      if (!registered) {
+        setError("We couldn't find an ETICO account with that email. Check it, or create an account.")
+        return
+      }
+      setResendSec(30)
+      setStage(2)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function submitReset() {

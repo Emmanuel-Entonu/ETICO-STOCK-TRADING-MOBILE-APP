@@ -47,11 +47,11 @@ export default function WalletScreen() {
   const cardH = cardW / 2.1
 
   const {
-    kycStatus, walletBalance, vaAvailable,
+    kycStatus, cacsStatus, walletBalance, vaAvailable,
     vaNumber, vaBank, vaAccountName,
     ensureWallet, refreshWalletBalance, refreshVaAvailable,
   } = useAuthStore(useShallow(s => ({
-    kycStatus: s.kycStatus, walletBalance: s.walletBalance, vaAvailable: s.vaAvailable,
+    kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, walletBalance: s.walletBalance, vaAvailable: s.vaAvailable,
     vaNumber: s.vaNumber, vaBank: s.vaBank, vaAccountName: s.vaAccountName,
     ensureWallet: s.ensureWallet, refreshWalletBalance: s.refreshWalletBalance,
     refreshVaAvailable: s.refreshVaAvailable,
@@ -135,7 +135,7 @@ export default function WalletScreen() {
   // masked error. The wallet re-syncs on focus when that page closes.
   const openFund = () => {
     if (vaAvailable <= 0) {
-      toast.info('Nothing to move', 'Deposit to your virtual account first.')
+      toast.info('Nothing to move', 'Deposit to your wallet first.')
       return
     }
     router.push('/fund-wallet' as never)
@@ -170,7 +170,7 @@ export default function WalletScreen() {
           />
           <View style={styles.cardContent}>
             <View>
-              <Text style={styles.balanceEyebrow}>TRADING WALLET</Text>
+              <Text style={styles.balanceEyebrow}>TRADING ACCOUNT</Text>
               <Text
                 style={styles.balanceValue}
                 numberOfLines={1}
@@ -237,7 +237,7 @@ export default function WalletScreen() {
                     the amount; without it the text frame and glyphs disagreed
                     and the amount drew up over the label on iOS. */}
                 <View style={{ flex: 1, minWidth: 0, marginRight: spacing.md }}>
-                  <Text variant="eyebrow" tone="muted">VIRTUAL ACCOUNT</Text>
+                  <Text variant="eyebrow" tone="muted">WALLET</Text>
                   <Text style={styles.vaBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                     {naira(vaAvailable)}
                   </Text>
@@ -245,14 +245,21 @@ export default function WalletScreen() {
                 <Icon name="solar:card-transfer-bold" size={28} color={colors.brand} />
               </Row>
               <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-                Money in your account, available to move into your trading wallet.
+                Money in your wallet, available to move into your trading account.
               </Text>
               <View style={{ height: spacing.lg }} />
               <Button
-                title="Fund wallet"
+                title="Fund trading account"
                 onPress={openFund}
-                disabled={vaAvailable <= 0}
+                // Money only moves to the trading account once PAC has approved
+                // the CSCS (server enforces it too); until then it stays here.
+                disabled={vaAvailable <= 0 || cacsStatus !== 'approved'}
               />
+              {cacsStatus !== 'approved' ? (
+                <Text variant="small" tone="muted" align="center" style={{ marginTop: spacing.sm }}>
+                  You can move money to your trading account once your account is verified. Until then it stays safe in your wallet.
+                </Text>
+              ) : null}
             </View>
 
             {/* ── Deposit details ── */}
@@ -260,7 +267,7 @@ export default function WalletScreen() {
               ADD MONEY
             </Text>
             <Text variant="small" tone="muted" style={{ marginBottom: spacing.lg }}>
-              Transfer to this dedicated account from any bank. It shows up in your virtual account, then you move what you want into your trading wallet.
+              Transfer to this dedicated account from any bank. It shows up in your wallet, then you move what you want into your trading account.
             </Text>
 
             <View style={styles.detailCard}>
@@ -292,7 +299,7 @@ export default function WalletScreen() {
                   <Icon name="solar:clock-circle-linear" size={22} color={colors.textMuted} />
                   <Text variant="small" tone="muted" style={{ marginTop: spacing.sm }}>No deposits yet</Text>
                   <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs, paddingHorizontal: spacing.lg }}>
-                    Transfers into your virtual account show up here.
+                    Transfers into your wallet show up here.
                   </Text>
                 </View>
               ) : (

@@ -75,7 +75,7 @@ export default function FundWalletScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Header */}
         <Row align="center" justify="space-between" style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
-          <Text variant="h2">Fund wallet</Text>
+          <Text variant="h2">Fund trading account</Text>
           {phase !== 'success' && (
             <Pressable onPress={() => router.back()} hitSlop={12} disabled={phase === 'submitting'} style={styles.closeBtn}>
               <Icon name="solar:close-square-linear" size={22} color={phase === 'submitting' ? colors.textSubtle : colors.text} />
@@ -95,13 +95,13 @@ export default function FundWalletScreen() {
             </MotiView>
             <Text variant="h2" style={{ marginTop: spacing.xl }}>Sent</Text>
             <Text variant="body" tone="muted" align="center" style={{ marginTop: spacing.sm, paddingHorizontal: spacing.xl }}>
-              {naira(amt)} is moving into your trading wallet.
+              {naira(amt)} is moving into your trading account.
             </Text>
           </View>
         ) : (
           <View style={{ flex: 1, paddingHorizontal: spacing.xl }}>
             <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-              Move money from your virtual account into your trading wallet — your buying power on the exchange.
+              Move money from your wallet into your trading account — your buying power on the exchange.
             </Text>
 
             <Row align="center" justify="space-between" style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
@@ -129,7 +129,7 @@ export default function FundWalletScreen() {
 
             <View style={{ flex: 1 }} />
             <Button
-              title={phase === 'submitting' ? 'Sending…' : 'Confirm'}
+              title={phase === 'submitting' ? 'Moving money…' : valid ? `Move ${naira(amt)} to trading account` : 'Enter an amount'}
               onPress={onConfirm}
               loading={phase === 'submitting'}
               disabled={phase === 'submitting' || !valid}
@@ -144,7 +144,7 @@ export default function FundWalletScreen() {
         visible={pinOpen}
         submitting={phase === 'submitting'}
         title="Confirm funding"
-        subtitle={`Enter your PIN to move ${naira(amt)} to your wallet`}
+        subtitle={`Enter your PIN to move ${naira(amt)} into your trading account`}
         onVerified={doFund}
         onCancel={() => setPinOpen(false)}
       />

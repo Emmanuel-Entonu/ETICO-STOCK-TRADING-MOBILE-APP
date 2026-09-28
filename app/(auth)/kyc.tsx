@@ -56,7 +56,26 @@ function formatDobInput(raw: string): string {
 export default function KycScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, loadProfile, ensureWallet } = useAuthStore(useShallow((s) => ({ user: s.user, loadProfile: s.loadProfile, ensureWallet: s.ensureWallet })))
+  const { user, loadProfile, ensureWallet, kycStatus } = useAuthStore(useShallow((s) => ({ user: s.user, loadProfile: s.loadProfile, ensureWallet: s.ensureWallet, kycStatus: s.kycStatus })))
+
+  // Skipping BVN verification skips KYC entirely (no manual-entry form) and
+  // lands on Home, which shows a "Finish setting up" prompt to come back.
+  // Only a brand-new user is marked 'skipped'; someone redoing KYC keeps
+  // their current status and simply returns home.
+  const [skipping, setSkipping] = useState(false)
+  async function skipToHome() {
+    if (skipping) return
+    setSkipping(true)
+    try {
+      if (user && (!kycStatus || kycStatus === 'pending')) {
+        await supabase.from('profiles').update({ kyc_status: 'skipped' }).eq('id', user.id)
+        await loadProfile()
+      }
+    } finally {
+      setSkipping(false)
+      router.replace('/(app)')
+    }
+  }
   const [step, setStep] = useState<Step>(1)
 
   // Step 1
@@ -81,7 +100,9 @@ export default function KycScreen() {
   const [bvnProfile, setBvnProfile] = useState<BvnProfile | null>(null)
 
   // Step 2 — ID
-  const [idType, setIdType] = useState<typeof ID_TYPES[number]['value']>('International Passport')
+  // ID is ALWAYS the NIN from the verified BVN record — read-only, never typed
+  // or picked by the user (and never prefilled from an old saved profile).
+  const [idType, setIdType] = useState<typeof ID_TYPES[number]['value']>('National ID (NIN)')
   const [idNumber, setIdNumber] = useState('')
   // Step 2 — settlement (bank) account. This is the PAC account-opening form's
   // "BANK ACCOUNT DETAILS": where sale proceeds / withdrawals are paid out. It
@@ -148,9 +169,6 @@ export default function KycScreen() {
         fill(setDob, p.date_of_birth)
         fill(setAddress, p.address)
         fill(setPhone, p.phone)
-        fill(setIdNumber, p.id_number)
-        const savedType = ID_TYPES.find(t => t.value === p.id_type)?.value
-        if (savedType && p.id_number) setIdType(savedType)
         const bank = NG_BANKS.find(b => b.name === p.settlement_bank_name)
         if (bank) { setBankName(prev => prev || bank.name); setBankCode(prev => prev || bank.bankCode) }
         fill(setAccountNumber, p.settlement_account_number)
@@ -258,7 +276,8 @@ export default function KycScreen() {
       if (profile.dob)     setDob(profile.dob)
       if (profile.address) setAddress(profile.address)
       if (profile.phone)   setPhone(profile.phone)
-      if (profile.nin) { setIdType('National ID (NIN)'); setIdNumber(profile.nin) }
+      setIdType('National ID (NIN)')
+      setIdNumber(profile.nin ?? '')
       setBvnDone(true)
     } catch (e) {
       setBvnError((e as Error).message)
@@ -277,7 +296,7 @@ export default function KycScreen() {
   // when the step is complete.
   function validateStep1(): boolean {
     const errs: Record<string, string> = {}
-    if (!bvnDone && !bvnSkipped) errs.bvn = 'Verify your BVN or choose to continue without it'
+    if (!bvnDone) errs.bvn = 'Verify your BVN to continue, or tap “Skip KYC for now” to do it later'
     const name = validateFullName(fullName); if (!name.ok) errs.fullName = name.error
     const dobV = validateDob(dob);           if (!dobV.ok) errs.dob = dobV.error
     const addrV = validateAddress(address);  if (!addrV.ok) errs.address = addrV.error
@@ -288,7 +307,9 @@ export default function KycScreen() {
 
   function validateStep2(): boolean {
     const errs: Record<string, string> = {}
-    const idV = validateIdNumber(idNumber); if (!idV.ok) errs.idNumber = idV.error
+    if (!bvnProfile?.nin || !/^\d{11}$/.test(idNumber)) {
+      errs.idNumber = 'Your BVN record has no NIN attached. Link your NIN to your BVN at your bank, then try again — or contact support.'
+    }
     if (bankName.trim().length < 2) errs.bankName = 'Select your settlement bank'
     if (!/^\d{10}$/.test(accountNumber)) errs.accountNumber = 'Account number must be 10 digits'
     if (accountName.trim().length < 2) errs.accountName = 'Enter the name on the account'
@@ -462,7 +483,10 @@ export default function KycScreen() {
               </Pressable>
             ) : <View style={{ width: 40 }} />}
             <Text variant="eyebrow" tone="muted">STEP {step} / 5</Text>
-            <View style={{ width: 40 }} />
+            {/* Skip is available at every step — goes home, finish KYC later. */}
+            <Pressable onPress={skipToHome} disabled={skipping} hitSlop={10} accessibilityRole="button">
+              <Text variant="smallStrong" tone="muted">{skipping ? '…' : 'Skip KYC for now'}</Text>
+            </Pressable>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 6, marginTop: spacing.md }}>
@@ -551,23 +575,11 @@ export default function KycScreen() {
                           {otpLoading ? 'Verifying…' : 'Verify code'}
                         </Text>
                       </Pressable>
-                      <Pressable onPress={() => { setBvnRef(null); setOtp(''); setBvnSkipped(true) }} hitSlop={8}>
-                        <Text variant="smallStrong" tone="muted">Skip verification</Text>
-                      </Pressable>
                     </View>
+                    <Text variant="small" tone="subtle" style={{ marginTop: spacing.md }}>
+                      Didn’t get the code? Tap “Skip KYC for now” at the top and finish verifying later.
+                    </Text>
                   </MotiView>
-                )}
-
-                {/* Prominent "continue without verification" — available BEFORE
-                    the BVN is entered so users aren't forced through OTP (#12). */}
-                {!bvnDone && !bvnSkipped && !bvnRef && (
-                  <Pressable
-                    onPress={() => { setBvnSkipped(true); clearErr('bvn') }}
-                    style={({ pressed }) => [styles.skipBtn(), pressed && { opacity: 0.7 }]}
-                  >
-                    <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textMuted} />
-                    <Text variant="smallStrong" tone="muted">Continue without verification</Text>
-                  </Pressable>
                 )}
 
                 {/* Personal details reveal once BVN is settled */}
@@ -586,27 +598,20 @@ export default function KycScreen() {
             {/* ───────────────────────── STEP 2 ───────────────────────── */}
             {step === 2 && (
               <View>
-                <Text variant="eyebrow" tone="muted" style={{ marginBottom: spacing.md }}>ID TYPE</Text>
-                <View style={styles.listCard()}>
-                  {ID_TYPES.map((t, i) => {
-                    const selected = t.value === idType
-                    return (
-                      <Pressable
-                        key={t.value}
-                        onPress={() => setIdType(t.value)}
-                        style={[styles.listRow(), i < ID_TYPES.length - 1 && styles.listRowDivider()]}
-                      >
-                        <Text variant="bodyStrong" style={{ color: selected ? colors.text : colors.textMuted }}>{t.label}</Text>
-                        <View style={styles.radioOuter(selected)}>
-                          {selected && <View style={styles.radioDot()} />}
-                        </View>
-                      </Pressable>
-                    )
-                  })}
-                </View>
-
-                <View style={{ height: spacing['2xl'] }} />
-                <UField label="ID number" value={idNumber} onChangeText={(v: string) => { setIdNumber(v); clearErr('idNumber') }} placeholder="Enter your ID number" autoCapitalize="characters" big error={fieldErr.idNumber} />
+                {/* ID = NIN from the verified BVN record. Read-only. */}
+                <UField
+                  label="National ID number (NIN)"
+                  value={idNumber}
+                  onChangeText={() => {}}
+                  editable={false}
+                  placeholder="From your BVN record"
+                  big
+                  error={fieldErr.idNumber}
+                  trailing={idNumber ? <Icon name="solar:lock-keyhole-bold" size={20} color={colors.textMuted} /> : undefined}
+                />
+                <Text variant="small" tone="muted" style={{ marginTop: -spacing.md, marginBottom: spacing.md }}>
+                  Taken from your BVN record. It can’t be changed here.
+                </Text>
 
                 <Divider label="Settlement bank account" />
                 <View style={styles.uploadNote()}>
@@ -731,7 +736,7 @@ export default function KycScreen() {
                   {bvnProfile?.stateOfOrigin ? <ReviewRow label="State of origin" value={bvnProfile.stateOfOrigin} /> : null}
                   {bvnProfile?.lgaOfOrigin ?   <ReviewRow label="LGA of origin" value={bvnProfile.lgaOfOrigin} /> : null}
                   <ReviewRow label="BVN" value={bvn ? `••••••${bvn.slice(-3)}` : 'Not provided'} />
-                  <ReviewRow label="ID type" value={idType} />
+                  <ReviewRow label="NIN" value={idNumber ? `•••••••${idNumber.slice(-4)}` : '—'} />
                   <ReviewRow label="Settlement bank" value={bankName} />
                   <ReviewRow label="Account number" value={accountNumber} />
                   <ReviewRow label="Account name" value={accountName} />
@@ -944,12 +949,6 @@ const styles = {
     width: 40, height: 40, borderRadius: radii.pill,
     alignItems: 'center' as const, justifyContent: 'center' as const,
     backgroundColor: colors.bgSubtle,
-  }),
-  skipBtn: () => ({
-    flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
-    gap: spacing.sm, marginTop: -spacing.md, marginBottom: spacing['2xl'],
-    paddingVertical: spacing.md, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSubtle,
   }),
   listCard: () => ({
     borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg,

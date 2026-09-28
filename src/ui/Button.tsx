@@ -78,8 +78,10 @@ function variantStyle(v: Variant, pressed: boolean, disabled: boolean): ViewStyl
   switch (v) {
     case 'primary':
       return { backgroundColor: pressed ? colors.brandPress : colors.brand, borderColor: 'transparent' }
+    // Only for destructive actions (cancel an order, delete). Real red now —
+    // it used to be identical to primary.
     case 'danger':
-      return { backgroundColor: pressed ? colors.brandPress : colors.brand, borderColor: 'transparent' }
+      return { backgroundColor: colors.negative, borderColor: 'transparent', opacity: pressed ? 0.85 : 1 }
     case 'secondary':
       return { backgroundColor: pressed ? colors.bgMuted : colors.bg, borderColor: colors.borderStrong }
     case 'ghost':
@@ -89,7 +91,8 @@ function variantStyle(v: Variant, pressed: boolean, disabled: boolean): ViewStyl
 
 function textColor(v: Variant, disabled: boolean): string {
   if (disabled) return colors.textSubtle
-  if (v === 'primary' || v === 'danger') return colors.textOnBrand
+  if (v === 'danger') return '#FFFFFF'
+  if (v === 'primary') return colors.textOnBrand
   if (v === 'ghost') return colors.brand
   return colors.text
 }

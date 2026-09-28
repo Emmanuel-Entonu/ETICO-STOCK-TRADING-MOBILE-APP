@@ -181,20 +181,54 @@ email (best-effort) after a successful insert. Needs `EMAIL_SEND_SECRET`
 
 ---
 
-## 6. KYC PDF → PAC (auto-send)
+## 6. KYC PDF → PAC (auto-send) — now server-side & reliable
 
-On KYC completion the browser builds the branded PDF and emails it to
-**`Info@pacsecurities.com`** as an attachment:
-- `Niqra-web/src/lib/partner-pdf.ts` → `submissionPdfBase64(sub, selfieDataUrl)`
-  (same layout as the dashboard "Export PDF").
-- `POST /api/kyc-pdf-to-pac` (authenticated web route) forwards it to the proxy
-  `/api/send-email-attachment` with `EMAIL_SEND_SECRET`.
-- Best-effort — never blocks KYC completion. The selfie is embedded as a **data
-  URL** (read before navigation) so the photo isn't lost when the page routes to
-  `/app`.
-- Mobile equivalent: generate a PDF (e.g. `expo-print`) and POST its base64 to
-  `/api/send-email-attachment` (server-to-server), or ask web to add a
-  proxy-side generator that builds the PDF from the profile row.
+On KYC completion the branded PDF (identity, ID, settlement account, next of kin,
+mother's maiden name, and the verification photo) is emailed to
+**`Info@pacsecurities.com`** as an attachment.
+
+> **This moved off the browser (23 Sep 2026 update).** It used to be built in the
+> browser and POSTed to `/api/kyc-pdf-to-pac` as a *best-effort* `fetch` right as
+> the page navigated to `/app`. That call was silently dropped whenever the tab
+> closed or the connection blipped — so some completed KYCs never reached PAC.
+> It now runs **on the server**, so it fires reliably every time.
+
+### How it works now (web)
+- `finalizeKycAction` (`Niqra-web/src/lib/actions/kyc.ts`) fires the send inside
+  **`after()`** (from `next/server`) — runs after the response is sent, so it
+  never blocks completion, but Vercel keeps the function alive to finish it.
+- `Niqra-web/src/lib/kyc-pac-email.ts` → `sendKycPdfToPac(userId)`: reads the
+  profile row with the **service role**, pulls the verification photo back out of
+  the **`kyc-selfies`** storage bucket, builds the PDF, and POSTs it to the proxy
+  `/api/send-email-attachment` with `EMAIL_SEND_SECRET`. No browser involvement,
+  so nothing depends on what the tab does after submit.
+- `Niqra-web/src/lib/partner-pdf-server.ts` → `submissionPdfBase64Server(sub, selfieBuffer)`:
+  the Node twin of the client `partner-pdf.ts` (same layout / branding). jsPDF
+  runs headless; image dimensions are parsed straight from the PNG/JPEG header.
+- The old browser POST in `app/kyc/page.tsx` was **removed**. The authenticated
+  `POST /api/kyc-pdf-to-pac` route is kept only for manual/one-off re-sends.
+
+### Two gotchas we hit (mind these if you build a server PDF path)
+1. **Vercel doesn't ship `public/` into the serverless function filesystem.** A
+   `readFile("public/brand/...")` fails at runtime there and the logos vanish.
+   Fix: fetch the brand assets **over HTTP** from the deployed site
+   (`${siteUrl}/brand/...`), with a disk read only as a dev fallback.
+2. **jsPDF's node build stores PNGs uncompressed** → the PDF ballooned to ~7.6 MB,
+   which base64-encodes to ~10 MB and **blows past Vercel's ~4.5 MB request-body
+   limit** (the send would 413 before reaching the mailer). Fix: pass the `"FAST"`
+   (FlateDecode) compression arg to every `addImage(...)` → PDF drops to ~525 KB.
+   Applied to both the server and client PDF builders.
+
+### How mobile should mirror it
+- Simplest: after your KYC completion call, hit a small **server/proxy** endpoint
+  that runs the same `sendKycPdfToPac`-style flow (read profile + selfie, build
+  PDF, POST to `/api/send-email-attachment`). Keep the send server-side so it
+  doesn't depend on the app staying foregrounded.
+- If you generate the PDF on-device (e.g. `expo-print`), POST its base64 to
+  `/api/send-email-attachment` from a backend (never bake `EMAIL_SEND_SECRET`
+  into the app), and **keep the attachment well under ~4.5 MB** (compress images).
+- Or ask web to expose a tiny authenticated `POST /api/kyc/resend-pac` that takes
+  a user id and reuses `sendKycPdfToPac` — then mobile just calls that.
 
 ---
 
@@ -202,7 +236,10 @@ On KYC completion the browser builds the branded PDF and emails it to
 - Branded `welcome` email → queued ✅
 - Plain send + Fixie IP routing + funded merchant → queued ✅
 - Attachment (`/api/send-email-attachment`) with a PDF → queued ✅
-- Web typecheck + production build green; proxy typecheck green.
+- **Server-side KYC PDF → PAC**: real submission (photo + all fields) built
+  headless via `submissionPdfBase64Server`, ~525 KB after compression, queued to
+  PAC (200) ✅
+- Web typecheck green.
 
 ## 8. Known follow-ups
 - Native mobile OTP reset needs the two JSON API routes (§2) — not built yet.

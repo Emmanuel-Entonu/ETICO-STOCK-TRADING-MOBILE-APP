@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { View, StyleSheet, Dimensions } from 'react-native'
 import { MotiView } from 'moti'
-import Svg, { Line, Rect, G, Circle, Text as SvgText } from 'react-native-svg'
+import Svg, { Line, G, Circle, Path } from 'react-native-svg'
 import { Text, Row } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
 import { getHistoricalPrices } from '@/lib/pacApi'
 
 // ─────────────────────────────────────────────────────────────
-// Candle chart — mobile port of Niqra-web's CandleChart. Same OHLC + volume
-// composition, same "real if available, symbol-seeded synthetic if not"
-// pattern. No timeframe selector — always 90 days. If PAC returns fewer
-// than 2 real candles, we render a deterministic placeholder so the tile
-// never looks empty.
+// Price chart — a simple line of daily closes over 90 days (the candlestick +
+// volume version was replaced per the issue log). Real PAC history only;
+// skeleton while loading, "unavailable" if there's nothing to plot.
 // ─────────────────────────────────────────────────────────────
 
 interface Candle {
@@ -116,20 +114,19 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
     return () => { cancelled = true }
   }, [symbol])
 
-  const ceil = useMemo(() => {
-    if (real && real.length > 0) return Math.max(...real.map(k => k.h)) * 1.1
-    return (price || 100) * 1.4
-  }, [real, price])
-
-  const ticksMemo = useMemo(() => {
-    const step = Math.pow(10, Math.floor(Math.log10(Math.max(ceil, 1))))
-    const values = [ceil, ceil * 0.67, ceil * 0.33, 0].map(v => Math.round(v / step) * step)
-    return Array.from(new Set(values))
-  }, [ceil])
+  // Price range of the closes (not from zero) so moves are readable.
+  const range = useMemo(() => {
+    if (!real || real.length < 2) return { lo: 0, hi: 1 }
+    const cs = real.map(k => k.c)
+    let lo = Math.min(...cs), hi = Math.max(...cs)
+    if (hi - lo < 1e-9) { lo = lo * 0.98; hi = hi * 1.02 }
+    const pad = (hi - lo) * 0.12
+    return { lo: Math.max(0, lo - pad), hi: hi + pad }
+  }, [real])
 
   const useReal = !!real && real.length >= 2
 
-  // Skeleton while the history loads — no synthetic fallback anymore.
+  // Skeleton while the history loads.
   if (loading || real === null) {
     return (
       <View style={styles.wrap}>
@@ -158,56 +155,42 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
     )
   }
 
-  const candles = real
-  const n = candles.length
-  const maxVol = Math.max(1, ...candles.map(k => k.v))
+  // ── Simple line chart of daily closes (issue log: "something simpler like
+  //    line"). Colour follows the period's direction; tap/drag to read a day.
+  const pts = real
+  const n = pts.length
+  const W = chartW
+  const H = height
+  const PAD_Y = 8
+  const x = (i: number) => (n === 1 ? W / 2 : (i / (n - 1)) * W)
+  const y = (v: number) => PAD_Y + (1 - (v - range.lo) / (range.hi - range.lo)) * (H - PAD_Y * 2)
 
-  // Layout in SVG units
-  const VB_W = chartW
-  const VB_H = height
-  const AXIS_W = 44
-  const VOL_H = 40
-  const GAP = 6
-  const PLOT_H = VB_H - VOL_H - GAP
+  const first = pts[0]
+  const last = pts[n - 1]
+  const periodPct = first.c !== 0 ? ((last.c - first.c) / first.c) * 100 : 0
+  const periodUp = periodPct >= 0
+  const lineColor = periodUp ? colors.positive : colors.negative
 
-  const plotW = VB_W - AXIS_W
-  const slot = plotW / n
-  const bodyW = Math.max(1.5, slot * 0.58)
-  const xMid = (i: number) => i * slot + slot / 2
-  const yPrice = (v: number) => (1 - v / ceil) * PLOT_H
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.c).toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L${x(n - 1).toFixed(1)} ${H} L${x(0).toFixed(1)} ${H} Z`
 
-  const first = candles[0]
-  const last = candles[n - 1]
-  const headerChangePct = first.o !== 0 ? ((last.c - first.o) / first.o) * 100 : 0
-  const headerUp = headerChangePct >= 0
-  const activeColor = isUp ? colors.positive : colors.negative
-  const upColor = colors.positive
-  const downColor = colors.negative
-
-  const ticks = ticksMemo
-
-  // Tap / drag scrubbing — the candle under the finger drives the header OHLC
-  // and a crosshair, so users read the exact value at any point.
-  const shown = selIdx != null ? candles[selIdx] : last
-  const shownUp = shown.c >= shown.o
-  const pickIdx = (x: number) => Math.max(0, Math.min(n - 1, Math.floor(x / slot)))
+  const shown = selIdx != null ? pts[selIdx] : last
+  const shownDate = new Date(shown.t).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+  const pickIdx = (px: number) => Math.max(0, Math.min(n - 1, Math.round((px / W) * (n - 1))))
 
   return (
     <View style={styles.wrap}>
-      {/* Header line: OHLC of the last (or the finger-selected) candle */}
       <Row justify="space-between" align="center" style={{ marginBottom: spacing.md }}>
-        <Row gap="md" align="baseline">
-          <Text variant="eyebrow" tone="muted">O · {naira(shown.o, { fractionDigits: 2 })}</Text>
-          <Text variant="eyebrow" tone="muted">H · {naira(shown.h, { fractionDigits: 2 })}</Text>
-          <Text variant="eyebrow" tone="muted">L · {naira(shown.l, { fractionDigits: 2 })}</Text>
-          <Text variant="eyebrow" style={{ color: shownUp ? upColor : downColor }}>C · {naira(shown.c, { fractionDigits: 2 })}</Text>
-        </Row>
-        <Text
-          variant="smallStrong"
-          style={{ color: headerUp ? upColor : downColor }}
-        >
-          {headerUp ? '+' : '−'}{Math.abs(headerChangePct).toFixed(2)}%
-        </Text>
+        <View>
+          <Text variant="bodyStrong">{naira(shown.c, { fractionDigits: 2 })}</Text>
+          <Text variant="small" tone="subtle">{selIdx != null ? shownDate : 'Last close'}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text variant="smallStrong" style={{ color: lineColor }}>
+            {periodUp ? '+' : '−'}{Math.abs(periodPct).toFixed(2)}%
+          </Text>
+          <Text variant="small" tone="subtle">{`${n} days`}</Text>
+        </View>
       </Row>
 
       <View
@@ -215,104 +198,24 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
         onMoveShouldSetResponder={() => true}
         onResponderGrant={(e) => setSelIdx(pickIdx(e.nativeEvent.locationX))}
         onResponderMove={(e) => setSelIdx(pickIdx(e.nativeEvent.locationX))}
+        onResponderRelease={() => setSelIdx(null)}
+        onResponderTerminate={() => setSelIdx(null)}
       >
-      <Svg width={VB_W} height={VB_H} viewBox={`0 0 ${VB_W} ${VB_H}`}>
-        {/* Gridlines + right-axis ticks */}
-        {ticks.map(t => (
-          <G key={t}>
-            <Line
-              x1={0}
-              x2={plotW}
-              y1={yPrice(t)}
-              y2={yPrice(t)}
-              stroke={colors.border}
-              strokeWidth={1}
-            />
-            <SvgText
-              x={VB_W - 4}
-              y={yPrice(t) + 4}
-              textAnchor="end"
-              fill={colors.textSubtle}
-              fontSize={9}
-              fontWeight="600"
-            >
-              {t.toFixed(0)}
-            </SvgText>
-          </G>
-        ))}
-
-        {/* Last-close guide (dashed) */}
-        <Line
-          x1={0}
-          x2={plotW}
-          y1={yPrice(last.c)}
-          y2={yPrice(last.c)}
-          stroke={activeColor}
-          strokeOpacity={0.5}
-          strokeDasharray="3 4"
-          strokeWidth={1}
-        />
-
-        {/* Candles */}
-        <G>
-          {candles.map((k, i) => {
-            const color = k.c >= k.o ? upColor : downColor
-            const top = yPrice(Math.max(k.o, k.c))
-            const bottom = yPrice(Math.min(k.o, k.c))
-            return (
-              <G key={i}>
-                <Line
-                  x1={xMid(i)}
-                  x2={xMid(i)}
-                  y1={yPrice(k.h)}
-                  y2={yPrice(k.l)}
-                  stroke={color}
-                  strokeWidth={1}
-                />
-                <Rect
-                  x={xMid(i) - bodyW / 2}
-                  y={top}
-                  width={bodyW}
-                  height={Math.max(1, bottom - top)}
-                  fill={color}
-                />
-              </G>
-            )
-          })}
-        </G>
-
-        {/* Volume strip */}
-        <G transform={`translate(0 ${PLOT_H + GAP})`}>
-          {candles.map((k, i) => {
-            const h = (k.v / maxVol) * VOL_H
-            return (
-              <Rect
-                key={i}
-                x={xMid(i) - bodyW / 2}
-                y={VOL_H - h}
-                width={bodyW}
-                height={h}
-                fill={k.c >= k.o ? upColor : downColor}
-                fillOpacity={0.4}
-              />
-            )
-          })}
-        </G>
-
-        {/* Crosshair for the finger-selected candle */}
-        {selIdx != null && (
-          <G>
-            <Line x1={xMid(selIdx)} x2={xMid(selIdx)} y1={0} y2={PLOT_H} stroke={colors.textMuted} strokeWidth={1} strokeDasharray="2 3" />
-            <Circle cx={xMid(selIdx)} cy={yPrice(candles[selIdx].c)} r={3.5} fill={colors.text} />
-          </G>
-        )}
-      </Svg>
+        <Svg width={W} height={H}>
+          <Path d={areaPath} fill={lineColor} fillOpacity={0.08} />
+          <Path d={linePath} stroke={lineColor} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+          {selIdx != null && (
+            <G>
+              <Line x1={x(selIdx)} x2={x(selIdx)} y1={0} y2={H} stroke={colors.textMuted} strokeWidth={1} strokeDasharray="2 3" />
+              <Circle cx={x(selIdx)} cy={y(pts[selIdx].c)} r={4} fill={lineColor} stroke={colors.bg} strokeWidth={2} />
+            </G>
+          )}
+        </Svg>
       </View>
 
-      {/* Loading + sample footnote */}
       <Row justify="space-between" align="center" style={{ marginTop: spacing.sm }}>
-        <Text variant="small" tone="subtle">{`${n} days`}</Text>
-        <Text variant="small" tone="subtle">NGX · daily</Text>
+        <Text variant="small" tone="subtle">Tap and drag to see a day</Text>
+        <Text variant="small" tone="subtle">NGX · daily close</Text>
       </Row>
     </View>
   )

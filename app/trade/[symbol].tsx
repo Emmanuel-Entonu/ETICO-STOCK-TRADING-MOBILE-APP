@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, ScrollView, StyleSheet, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, BackHandler } from 'react-native'
 import { BlurView } from 'expo-blur'
+import { MotiView } from 'moti'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -10,7 +11,7 @@ import { usePinStore } from '@/store/pinStore'
 import { useWatchlistStore } from '@/store/watchlistStore'
 import { validateOrder, getSecurityData, type PacValidationResult, type PacMarketData } from '@/lib/pacApi'
 import { validateQuantity, validatePrice, validateSymbol } from '@/lib/validation'
-import { Text, Row, Stack, Card, Button, Divider, OptionGroup, Icon, toast, Loader } from '@/ui'
+import { Text, Row, Stack, Card, Button, Divider, OptionGroup, Icon, toast, Loader, Notice } from '@/ui'
 import { colors, radii, spacing, typography, useThemedStyles } from '@/theme'
 import { naira, pct } from '@/lib/format'
 import { StockLogo } from '@/components/StockLogo'
@@ -316,11 +317,20 @@ export default function TradeScreen() {
         </View>
       )}
 
-      {/* Order-entry bottom sheet */}
-      <Modal visible={orderSheetOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setOrderSheetOpen(false)}>
-        <View style={styles.orderRoot}>
+      {/* Order-entry bottom sheet — an in-screen overlay, NOT a <Modal>. Under
+          Android edge-to-edge (SDK 57) a Modal is its own edge-to-edge dialog
+          window where ADJUST_RESIZE does nothing and KeyboardAvoidingView was
+          off, so the keyboard covered the quantity field and Review button.
+          In the screen's own window keyboard events are reliable, so
+          KeyboardAvoidingView lifts the sheet on BOTH platforms. Hardware
+          back still closes it (BackHandler above). */}
+      {orderSheetOpen && (
+      <View style={[StyleSheet.absoluteFill, { zIndex: 50, elevation: 50 }]}>
+        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ type: 'timing', duration: 180 }} style={StyleSheet.absoluteFill}>
           <Pressable style={styles.orderBackdrop} onPress={() => setOrderSheetOpen(false)} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        </MotiView>
+        <KeyboardAvoidingView style={styles.orderRoot} behavior="padding" pointerEvents="box-none">
+          <MotiView from={{ translateY: 420 }} animate={{ translateY: 0 }} transition={{ type: 'timing', duration: 260 }}>
             <View style={[styles.orderSheet, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.lg }]}>
             <View style={styles.orderHandle} />
             <Row justify="space-between" align="center" style={{ marginBottom: spacing.lg }}>
@@ -426,8 +436,8 @@ export default function TradeScreen() {
                     icon={cacsStatus === 'rejected' ? 'solar:shield-warning-bold' : 'solar:clock-circle-bold'}
                     title={cacsStatus === 'rejected' ? 'CSCS verification rejected' : 'CSCS account under review'}
                     subtitle={cacsStatus === 'rejected'
-                      ? 'PAC Securities couldn’t approve your account. Redo KYC to try again.'
-                      : 'Your details are with PAC Securities. Trading unlocks once approved — usually 1–2 business days.'}
+                      ? 'We couldn’t verify your account. Redo KYC to try again.'
+                      : 'Your account is being verified. Trading unlocks once it’s approved — usually 1–2 business days.'}
                     ctaLabel={cacsStatus === 'rejected' ? 'Redo KYC' : 'View status'}
                     onPress={() => router.push((cacsStatus === 'rejected' ? '/(auth)/kyc' : '/(app)') as never)}
                   />
@@ -438,16 +448,15 @@ export default function TradeScreen() {
                     icon="solar:wallet-linear"
                     title={walletBalance <= 0 ? 'Your wallet is empty' : 'Not enough in your wallet'}
                     subtitle={walletBalance <= 0
-                      ? 'Fund your wallet to start trading.'
+                      ? 'Fund your trading account to start trading.'
                       : `You have ${naira(walletBalance)} — this order needs ${naira(estimatedTotal)}.`}
-                    ctaLabel="Fund wallet"
+                    ctaLabel="Fund trading account"
                     onPress={() => { setOrderSheetOpen(false); router.push('/wallet' as never) }}
                   />
                 )}
 
                 <Button
-                  title={`Review ${side === 'BUY' ? 'Buy' : 'Sell'}`}
-                  variant={side === 'BUY' ? 'primary' : 'danger'}
+                  title={`Review ${side === 'BUY' ? 'buy' : 'sell'} order`}
                   onPress={() => {
                     // Fresh idempotency key per confirm-sheet-open. Any retry
                     // inside this sheet reuses the same key so PAC dedups.
@@ -458,9 +467,10 @@ export default function TradeScreen() {
                 />
               </Stack>
             </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+          </MotiView>
+        </KeyboardAvoidingView>
+      </View>
+      )}
 
       <ConfirmSheet
         visible={confirmOpen}
@@ -713,9 +723,7 @@ function ConfirmSheet({
               </Card>
             )}
             {validationError && (
-              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.negativeSubtle, borderColor: 'transparent' }}>
-                <Text variant="small" tone="negative">Fee calc failed: {validationError}</Text>
-              </Card>
+              <Notice tone="error" title="Couldn’t calculate fees" body={`${validationError} Close this and try again.`} style={{ marginBottom: spacing.md }} />
             )}
             {validation && (
               <Card style={{ marginBottom: spacing.md, backgroundColor: colors.bgMuted, borderColor: 'transparent' }}>
@@ -728,37 +736,31 @@ function ConfirmSheet({
             )}
 
             {insufficient && (
-              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.negativeSubtle, borderColor: 'transparent' }}>
-                <Row gap="md" align="flex-start">
-                  <Icon name="solar:wallet-money-bold" size={20} color={colors.negative} />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="smallStrong" tone="negative">Insufficient funds</Text>
-                    <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>Wallet balance: {naira(walletCash)}</Text>
-                  </View>
-                </Row>
-              </Card>
+              <Notice
+                tone="error"
+                icon="solar:wallet-money-bold"
+                title="Not enough in your trading account"
+                body={`You have ${naira(walletCash)} available — ${naira(orderTotal - walletCash)} short for this order. Fund your trading account or lower the quantity.`}
+                style={{ marginBottom: spacing.md }}
+              />
             )}
 
             {side === 'SELL' && (
-              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.warningSubtle, borderColor: 'transparent' }}>
-                <Row gap="md" align="flex-start">
-                  <Icon name="solar:calendar-mark-bold" size={20} color={colors.warning} />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="smallStrong" style={{ color: colors.warning }}>T+3 Settlement</Text>
-                    <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-                      Proceeds will credit your cash balance 3 business days after today's trade date (NGX rule).
-                    </Text>
-                  </View>
-                </Row>
-              </Card>
+              <Notice
+                tone="info"
+                icon="solar:calendar-mark-bold"
+                title="Settles next business day (T+1)"
+                body="Your sale proceeds reach your cash balance one business day after today’s trade."
+                style={{ marginBottom: spacing.md }}
+              />
             )}
           </ScrollView>
 
-          <Row gap="md" style={{ marginTop: spacing.md }}>
-            <Button title="Cancel" variant="secondary" onPress={onClose} />
+          {/* Actions: one full-width primary in the thumb zone naming the action
+              and amount; Cancel as a quiet text button beneath it. */}
+          <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
             <Button
-              title={submitting ? 'Placing…' : `Confirm ${side}`}
-              variant={side === 'BUY' ? 'primary' : 'danger'}
+              title={submitting ? 'Placing order…' : `${buy ? 'Buy' : 'Sell'} ${symbol} · ${naira(validation?.totalValue ?? orderTotal)}`}
               onPress={onConfirm}
               loading={submitting}
               // Require server-side validation to have completed successfully
@@ -766,7 +768,9 @@ function ConfirmSheet({
               // before fees/oversell/insufficient-cash checks come back.
               disabled={validating || insufficient || !!validationError || !validation}
             />
-          </Row>
+            <Button title="Cancel" variant="ghost" size="md" onPress={onClose} disabled={submitting} />
+            <Text variant="small" tone="subtle" align="center">Next: accept the trading terms and enter your PIN.</Text>
+          </View>
         </View>
       </View>
     </Modal>
@@ -823,24 +827,20 @@ function ReceiptSheet({ receipt, symbol, name, onClose, onViewPortfolio }: {
           </Card>
 
           {!isBuy && (
-            <Card style={{ width: '100%', backgroundColor: colors.warningSubtle, borderColor: 'transparent' }}>
-              <Row gap="md" align="flex-start">
-                <Icon name="solar:calendar-mark-bold" size={20} color={colors.warning} />
-                <View style={{ flex: 1 }}>
-                  <Text variant="smallStrong" style={{ color: colors.warning }}>T+3 Settlement</Text>
-                  <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-                    Your proceeds of {naira(receipt.total)} will credit your cash balance in 3 business days.
-                  </Text>
-                </View>
-              </Row>
-            </Card>
+            <Notice
+              tone="info"
+              icon="solar:calendar-mark-bold"
+              title="Settles next business day (T+1)"
+              body={`Your proceeds of ${naira(receipt.total)} reach your cash balance in one business day.`}
+              style={{ width: '100%' }}
+            />
           )}
         </View>
 
-        <Row gap="md">
-          <Button title="New Trade" variant="secondary" onPress={onClose} />
-          <Button title="View Portfolio" onPress={onViewPortfolio} />
-        </Row>
+        <View style={{ gap: spacing.xs }}>
+          <Button title="View portfolio" onPress={onViewPortfolio} />
+          <Button title="Place another trade" variant="ghost" size="md" onPress={onClose} />
+        </View>
       </SafeAreaView>
     </Modal>
   )
@@ -905,8 +905,8 @@ function LegalTermsModal({
               body="Once submitted, this order is transmitted to ETICO's brokerage partner and to NGX for execution. It cannot be recalled once matched. Market orders execute at the best available price, which may differ from the last-traded price shown."
             />
             <LegalClause
-              title="3. Settlement (T+3)"
-              body="Nigerian equity trades settle three business days after the trade date. Sell proceeds are not immediately available in cash. Buy orders require cleared funds in your wallet at the time of placement."
+              title="3. Settlement (T+1)"
+              body="Nigerian equity trades settle one business day after the trade date. Sell proceeds are not immediately available in cash. Buy orders require cleared funds in your wallet at the time of placement."
             />
             <LegalClause
               title="4. Fees & Charges"
@@ -935,15 +935,10 @@ function LegalTermsModal({
             </Text>
           </Pressable>
 
-          <Row gap="md" style={{ marginTop: spacing.md }}>
-            <Button title="Decline" variant="secondary" onPress={onDecline} />
-            <Button
-              title="Accept & Continue"
-              variant={side === 'BUY' ? 'primary' : 'danger'}
-              onPress={onAccept}
-              disabled={!checked}
-            />
-          </Row>
+          <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
+            <Button title="Accept and continue" onPress={onAccept} disabled={!checked} />
+            <Button title="Decline" variant="ghost" size="md" onPress={onDecline} />
+          </View>
         </View>
       </View>
     </Modal>
