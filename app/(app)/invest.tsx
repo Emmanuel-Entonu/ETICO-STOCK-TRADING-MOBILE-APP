@@ -1,16 +1,17 @@
-import { useCallback, useMemo, useEffect, useState } from 'react'
-import { View, ScrollView, Pressable, StyleSheet, Dimensions, Image, type ImageSourcePropType } from 'react-native'
+import { useMemo, useEffect, useRef, useState } from 'react'
+import { View, ScrollView, Pressable, StyleSheet, Dimensions, Image, TextInput, Keyboard, BackHandler, type ImageSourcePropType } from 'react-native'
 import { MotiView } from 'moti'
-import { useFocusEffect, useRouter } from 'expo-router'
+import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { Text, Icon } from '@/ui'
-import { colors, spacing, radii, useThemedStyles } from '@/theme'
+import { colors, spacing, radii, typography, useThemedStyles } from '@/theme'
 import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { isEthical, ETHICAL_TICKERS } from '@/lib/ethicalTickers'
 import { useShallow } from 'zustand/react/shallow'
 import { RiskDial } from '@/components/RiskDial'
 import { RecommendedRail } from '@/components/RecommendedRail'
+import { AssetSearch } from '@/components/AssetSearch'
 
 // Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
@@ -41,12 +42,23 @@ export default function AssetsScreen() {
   const router = useRouter()
   const { marketData, loadMarketData } = usePortfolioStore(useShallow((s) => ({ marketData: s.marketData, loadMarketData: s.loadMarketData })))
 
-  // Bump on every tab focus so the MotiView keys change and the cards re-run
-  // their stagger animation each visit.
-  const [focusKey, setFocusKey] = useState(0)
-  useFocusEffect(useCallback(() => { setFocusKey(k => k + 1) }, []))
+  // Entrance animation plays once (first mount). It used to replay on every
+  // tab visit, which made switching to Assets feel slow.
+  const focusKey = 0
+
+  // Inline search: offerings + stocks, right here on the Assets page.
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const inputRef = useRef<TextInput>(null)
+  const closeSearch = () => { setQuery(''); setSearching(false); Keyboard.dismiss() }
 
   useEffect(() => { if (marketData.length === 0) loadMarketData() }, [])
+  // Android back closes the search instead of leaving the page.
+  useEffect(() => {
+    if (!searching) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { closeSearch(); return true })
+    return () => sub.remove()
+  }, [searching])
 
   const ethicalCount = useMemo(() => marketData.filter(s => isEthical(s.symbol)).length, [marketData])
   const stockCount = ethicalCount || ETHICAL_TICKERS.size
@@ -81,19 +93,55 @@ export default function AssetsScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + spacing.lg }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <View style={styles.header}>
           <Text variant="h1">Assets</Text>
           <Pressable
-            onPress={() => router.push('/(app)/market?search=1' as never)}
+            onPress={() => { setSearching(true); setTimeout(() => inputRef.current?.focus(), 50) }}
             accessibilityRole="button"
-            accessibilityLabel="Search stocks"
+            accessibilityLabel="Search assets and stocks"
             hitSlop={10}
             style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.6 }]}
           >
             <Icon name="solar:magnifer-linear" size={22} color={colors.text} />
           </Pressable>
         </View>
+
+        {searching && (
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Icon name="solar:magnifer-linear" size={18} color={colors.textMuted} />
+              <TextInput
+                ref={inputRef}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search stocks, bonds, savings…"
+                placeholderTextColor={colors.textSubtle}
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Icon name="solar:close-circle-bold" size={18} color={colors.textSubtle} />
+                </Pressable>
+              )}
+            </View>
+            <Pressable onPress={closeSearch} hitSlop={8} style={{ paddingLeft: spacing.md }}>
+              <Text variant="smallStrong" tone="brand">Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {searching ? (
+          <AssetSearch
+            query={query}
+            marketData={marketData}
+            onOpen={(route) => { closeSearch(); router.push(route as never) }}
+          />
+        ) : (
+        <>
 
         <View style={styles.eyebrowWrap}>
           <Text variant="eyebrow" tone="muted">ETHICAL INVESTING</Text>
@@ -136,6 +184,8 @@ export default function AssetsScreen() {
         <View style={{ marginTop: spacing.lg }}>
           <RecommendedRail />
         </View>
+        </>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -208,6 +258,30 @@ const makeStyles = () => StyleSheet.create({
     paddingBottom: spacing['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: GRID_H_PADDING,
+    marginTop: -spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    height: 48,
+  },
+  searchInput: {
+    flex: 1,
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   searchBtn: {
     position: 'absolute',

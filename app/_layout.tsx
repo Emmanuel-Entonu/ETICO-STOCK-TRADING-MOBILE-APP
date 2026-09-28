@@ -1,6 +1,6 @@
 // @@iconify-code-gen
 import { useEffect, useRef, useState } from 'react'
-import { Stack, useRouter, useSegments } from 'expo-router'
+import { Stack, useRouter, useSegments, ThemeProvider, DarkTheme, DefaultTheme } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AppState, Appearance, View } from 'react-native'
@@ -161,6 +161,14 @@ export default function RootLayout() {
   // read from the `colors` proxy sees the right values.
   setActivePalette(resolvePalette(mode))
   const scheme = resolveScheme(mode)
+  // Navigation paints its own background behind every screen during a
+  // transition. Without a theme it's React Navigation's default light grey —
+  // the white flash when switching pages (worst in dark mode). Use ours.
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme
+  const navTheme = {
+    ...base,
+    colors: { ...base.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.border, primary: colors.brand },
+  }
 
   // Theme now follows the phone exclusively (no in-app theme picker). Reset any
   // previously-persisted light/dark choice back to 'system' on boot.
@@ -262,12 +270,13 @@ export default function RootLayout() {
   return (
     // useThemedStyles in each component re-computes its StyleSheet.create on
     // scheme change, so a full-tree remount is no longer necessary.
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ backgroundColor: colors.bg }}>
+      <ThemeProvider value={navTheme}>
       <AuthGate />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <AppErrorBoundary>
         {/* freezeOnBlur: screens underneath the active one stop re-rendering. */}
-        <Stack screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}>
+        <Stack screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 180, freezeOnBlur: true, contentStyle: { backgroundColor: colors.bg } }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
           <Stack.Screen name="trade/[symbol]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
@@ -290,6 +299,7 @@ export default function RootLayout() {
       <PrivacyOverlay />
       <BrandSplash />
       <ToastHost />
+      </ThemeProvider>
     </SafeAreaProvider>
   )
 }

@@ -27,7 +27,7 @@ export const PRIVACY_POLICY: LegalDoc = {
   effective: '9 September 2026',
   updated: '9 September 2026',
   intro:
-    'This Privacy Policy explains how Moneta Capital Investment Limited ("Moneta", "we", "us") — operating the ETICO web and mobile trading service — collects, uses, shares, and protects your personal data. We act as a data controller under the Nigeria Data Protection Act (NDPA) 2023. Please read it alongside our Terms of Service.',
+    'This Privacy Policy explains how Moneta Capital Investment Limited ("Moneta", "we", "us"), operating the ETICO web and mobile trading service, collects, uses, shares, and protects your personal data. We act as a data controller under the Nigeria Data Protection Act (NDPA) 2023. Please read it alongside our Terms of Service.',
   sections: [
     {
       n: 1,
@@ -52,11 +52,11 @@ export const PRIVACY_POLICY: LegalDoc = {
         {
           type: 'bullets',
           items: [
-            'Identity data — full name, date of birth, BVN, and identity details verified during KYC.',
-            'Contact data — email address, phone number, and residential address.',
-            'Financial data — settlement bank account details, virtual account, wallet balance, holdings, orders, and transaction history.',
-            'Account data — login credentials (stored hashed), KYC status, and account preferences.',
-            'Technical data — device identifiers, IP address, app version, and usage/diagnostic logs.',
+            'Identity data: full name, date of birth, BVN, and identity details verified during KYC.',
+            'Contact data: email address, phone number, and residential address.',
+            'Financial data: settlement bank account details, virtual account, wallet balance, holdings, orders, and transaction history.',
+            'Account data: login credentials (stored hashed), KYC status, and account preferences.',
+            'Technical data: device identifiers, IP address, app version, and usage/diagnostic logs.',
           ],
         },
       ],
@@ -110,7 +110,7 @@ export const PRIVACY_POLICY: LegalDoc = {
       n: 6,
       title: 'Data retention',
       blocks: [
-        { type: 'p', text: 'We keep your personal data for as long as your account is active and thereafter for the period required to meet our legal, regulatory, and record-keeping obligations — including anti-money-laundering and securities record rules — after which it is deleted or anonymised.' },
+        { type: 'p', text: 'We keep your personal data for as long as your account is active and thereafter for the period required to meet our legal, regulatory, and record-keeping obligations, including anti-money-laundering and securities record rules, after which it is deleted or anonymised.' },
       ],
     },
     {
@@ -175,7 +175,7 @@ export const TERMS_OF_SERVICE: LegalDoc = {
   effective: '9 September 2026',
   updated: '9 September 2026',
   intro:
-    'These Terms of Service (the "Terms") form a binding agreement between you and Moneta Capital Investment Limited ("Moneta", "we", "us") governing your access to and use of ETICO — our web and mobile trading service for the Nigerian Exchange ("NGX"). By creating an account, you accept these Terms. If you do not agree, do not use ETICO.',
+    'These Terms of Service (the "Terms") form a binding agreement between you and Moneta Capital Investment Limited ("Moneta", "we", "us") governing your access to and use of ETICO, our web and mobile trading service for the Nigerian Exchange ("NGX"). By creating an account, you accept these Terms. If you do not agree, do not use ETICO.',
   sections: [
     {
       n: 1,

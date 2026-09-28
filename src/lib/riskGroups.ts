@@ -33,17 +33,17 @@ export const RISK_META: Record<RiskKey, { label: string; meter: number; blurb: s
   low: {
     label: 'Conservative',
     meter: 2,
-    blurb: 'Established, dividend-paying companies — banks, telecoms, food and consumer brands. Smaller ups and downs.',
+    blurb: 'Established, dividend-paying companies: banks, telecoms, food and consumer brands. Smaller ups and downs.',
   },
   medium: {
     label: 'Balanced',
     meter: 3,
-    blurb: 'Growing large companies — industrials, pharma, logistics. A mix of steadiness and growth.',
+    blurb: 'Growing large companies: industrials, pharma, logistics. A mix of steadiness and growth.',
   },
   high: {
     label: 'Growth',
     meter: 4,
-    blurb: 'Smaller and faster-moving companies — energy, emerging names. Bigger swings, bigger potential.',
+    blurb: 'Smaller and faster-moving companies: energy, emerging names. Bigger swings, bigger potential.',
   },
 }
 

@@ -50,7 +50,7 @@ interface NotifState {
   server: Notif[]           // SERVER items (read = read_at set)
   dismissed: string[]
   seeded: boolean           // first sync for this user done (history marked read)
-  seededAt: string | null   // when that first sync ran — older trade items are history
+  seededAt: string | null   // when that first sync ran, older trade items are history
   readIds: string[]         // every id read on this device (survives list rebuilds)
   pendingSeen: string[]     // order ids seen while pending → fill notifications
   lastServerFetch: number
@@ -103,7 +103,7 @@ function derive(orders: PacOrderListItem[], status: AccountStatus, accountCreate
     const reason = (status.cacsRejectionReason ?? '').split('•').map(s => s.trim()).filter(Boolean)[0]
     out.push({
       id: `acct:kyc-rejected:${shortHash(status.cacsRejectionReason ?? '')}`, type: 'account',
-      title: 'Verification unsuccessful — redo your KYC',
+      title: 'Verification unsuccessful: redo your KYC',
       body: reason
         ? `We couldn’t verify your account: ${reason}. Tap to fix it and resubmit.`
         : 'We couldn’t verify your account. Tap to see why, fix it and resubmit.',
@@ -113,14 +113,14 @@ function derive(orders: PacOrderListItem[], status: AccountStatus, accountCreate
     out.push({
       id: 'acct:kyc', type: 'account',
       title: 'Verify your identity to start investing',
-      body: 'It takes about 5 minutes with your BVN. Once submitted, we review it — usually within 1–2 business days.',
+      body: 'It takes about 5 minutes with your BVN. Once submitted, we review it, usually within 1–2 business days.',
       createdAt: accountCreatedAt, read: false, route: '/(auth)/kyc',
     })
   } else if ((kyc === 'submitted' || kyc === 'verified') && cacs !== 'approved') {
     out.push({
       id: 'acct:kyc-review', type: 'account',
       title: 'Your details are under review',
-      body: 'Thanks for submitting your KYC. Reviews usually take 1–2 business days — we’ll let you know as soon as your account is approved.',
+      body: 'Thanks for submitting your KYC. Reviews usually take 1–2 business days. We’ll let you know as soon as your account is approved.',
       createdAt: now, read: false,
     })
   }
@@ -133,7 +133,7 @@ function derive(orders: PacOrderListItem[], status: AccountStatus, accountCreate
     const base = { type: 'trade' as const, createdAt: when, read: false, route: `/receipt/${o.id}` }
     if (s === 'FILLED') {
       out.push({ ...base, id: `order:${o.id}:filled`, title: `Order filled: ${o.secId}`,
-        body: `Your ${side} of ${qty.toLocaleString()} ${o.secId} is complete — ${naira(o.totalValue)}.` })
+        body: `Your ${side} of ${qty.toLocaleString()} ${o.secId} is complete (${naira(o.totalValue)}).` })
     } else if (s.includes('CANCEL')) {
       out.push({ ...base, id: `order:${o.id}:cancelled`, title: `Order cancelled: ${o.secId}`,
         body: `Your ${side} order for ${o.secId} was cancelled.` })

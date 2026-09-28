@@ -44,8 +44,8 @@ export async function cacheClear(prefix?: string): Promise<void> {
 
 // Common TTLs.
 export const TTL = {
-  market:    2 * 60 * 1000,    // 2 min — quotes go stale fast during trading
-  positions: 5 * 60 * 1000,    // 5 min — positions change on fills only
-  account:   5 * 60 * 1000,    // 5 min — cash balance
-  orders:    2 * 60 * 1000,    // 2 min — order status
+  market:    2 * 60 * 1000,    // 2 min, quotes go stale fast during trading
+  positions: 5 * 60 * 1000,    // 5 min, positions change on fills only
+  account:   5 * 60 * 1000,    // 5 min, cash balance
+  orders:    2 * 60 * 1000,    // 2 min, order status
 } as const

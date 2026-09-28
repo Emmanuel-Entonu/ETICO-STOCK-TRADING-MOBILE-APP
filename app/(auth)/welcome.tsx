@@ -25,7 +25,7 @@ export default function WelcomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
       {/* Smooth layered green dunes sweeping diagonally through the mid-lower
-          area, with a soft highlight where ridges overlap — matches the guide. */}
+          area, with a soft highlight where ridges overlap, matches the guide. */}
       <View style={styles.hills} pointerEvents="none">
         <Svg width="100%" height="100%" viewBox="0 0 400 460" preserveAspectRatio="xMidYMax slice">
           <Defs>

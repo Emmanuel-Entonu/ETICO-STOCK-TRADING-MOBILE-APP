@@ -27,8 +27,8 @@ export const lightPalette = {
   text:          '#2C3420',   // deep green-black ink
   textMuted:     '#6C7358',   // olive gray
   textSubtle:    '#9AA187',   // sage
-  textInverse:   '#FDFCFA',   // cream — on green surfaces
-  textOnBrand:   '#FDFCFA',   // cream — on green primary buttons
+  textInverse:   '#FDFCFA',   // cream: on green surfaces
+  textOnBrand:   '#FDFCFA',   // cream: on green primary buttons
 
   brand:         '#3A4429',   // GREEN leads in light
   brandPress:    '#2C3420',
@@ -43,7 +43,7 @@ export const lightPalette = {
   positive:      '#2E7D46',
   positiveSubtle:'#E4F1E6',
 
-  negative:      '#D42D20',   // real red — sell action, chart down candles, losses
+  negative:      '#D42D20',   // real red, sell action, chart down candles, losses
   negativeSubtle:'#FCE7E4',
 
   warning:       '#B4791A',
@@ -70,7 +70,7 @@ export const darkPalette: Palette = {
   text:          '#EAEDE7',   // primary text (warm off-white)
   textMuted:     '#8A9586',   // muted green-grey
   textSubtle:    '#5E685C',
-  textInverse:   '#0B0D0A',   // dark — on gold / light surfaces
+  textInverse:   '#0B0D0A',   // dark: on gold / light surfaces
   textOnBrand:   '#0B0D0A',   // dark ink on the gold primary buttons
 
   brand:         '#D4AF37',   // GOLD leads the dark theme (primary buttons, active, star)
@@ -78,7 +78,7 @@ export const darkPalette: Palette = {
   brandSubtle:   'rgba(212,175,55,0.15)',   // gold tint behind tiles
   brandInk:      '#E6C65C',   // lifted gold for emphasis
 
-  accent:        '#3FBF6B',   // green — ethical / flourish
+  accent:        '#3FBF6B',   // green: ethical / flourish
   accentPress:   '#34A65B',
   accentSubtle:  'rgba(63,191,107,0.15)',
   accentInk:     '#74D398',

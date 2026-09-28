@@ -159,7 +159,7 @@ export default function HomeScreen() {
                 beamWidth={2}
                 beamHeight={15}
                 beamNumber={12}
-                lightColor="#E8BE45"        // gold — the beams glow gold
+                lightColor="#E8BE45"        // gold: the beams glow gold
                 beamColor="#0D0E0B"         // near-black beam base
                 backgroundColor="#0B0C08"   // near-black canvas
                 ambientColor="#4C5A38"      // brand green wash in the valleys

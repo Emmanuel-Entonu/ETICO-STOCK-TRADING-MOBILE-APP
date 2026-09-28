@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Dimensions } from 'react-native'
 import { MotiView } from 'moti'
-import Svg, { Line, G, Circle, Path } from 'react-native-svg'
+import * as Haptics from 'expo-haptics'
+import Svg, { Path } from 'react-native-svg'
 import { Text, Row } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
@@ -159,24 +160,14 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
   //    line"). Colour follows the period's direction; tap/drag to read a day.
   const pts = real
   const n = pts.length
-  const W = chartW
-  const H = height
-  const PAD_Y = 8
-  const x = (i: number) => (n === 1 ? W / 2 : (i / (n - 1)) * W)
-  const y = (v: number) => PAD_Y + (1 - (v - range.lo) / (range.hi - range.lo)) * (H - PAD_Y * 2)
-
   const first = pts[0]
   const last = pts[n - 1]
   const periodPct = first.c !== 0 ? ((last.c - first.c) / first.c) * 100 : 0
   const periodUp = periodPct >= 0
   const lineColor = periodUp ? colors.positive : colors.negative
 
-  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.c).toFixed(1)}`).join(' ')
-  const areaPath = `${linePath} L${x(n - 1).toFixed(1)} ${H} L${x(0).toFixed(1)} ${H} Z`
-
   const shown = selIdx != null ? pts[selIdx] : last
   const shownDate = new Date(shown.t).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
-  const pickIdx = (px: number) => Math.max(0, Math.min(n - 1, Math.round((px / W) * (n - 1))))
 
   return (
     <View style={styles.wrap}>
@@ -193,30 +184,128 @@ export function PriceChart({ symbol, price, isUp, height = 220 }: Props) {
         </View>
       </Row>
 
-      <View
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderGrant={(e) => setSelIdx(pickIdx(e.nativeEvent.locationX))}
-        onResponderMove={(e) => setSelIdx(pickIdx(e.nativeEvent.locationX))}
-        onResponderRelease={() => setSelIdx(null)}
-        onResponderTerminate={() => setSelIdx(null)}
-      >
-        <Svg width={W} height={H}>
-          <Path d={areaPath} fill={lineColor} fillOpacity={0.08} />
-          <Path d={linePath} stroke={lineColor} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-          {selIdx != null && (
-            <G>
-              <Line x1={x(selIdx)} x2={x(selIdx)} y1={0} y2={H} stroke={colors.textMuted} strokeWidth={1} strokeDasharray="2 3" />
-              <Circle cx={x(selIdx)} cy={y(pts[selIdx].c)} r={4} fill={lineColor} stroke={colors.bg} strokeWidth={2} />
-            </G>
-          )}
-        </Svg>
-      </View>
+      <ScrubChart pts={pts} lo={range.lo} hi={range.hi} W={chartW} H={height} lineColor={lineColor} onSelect={setSelIdx} />
 
       <Row justify="space-between" align="center" style={{ marginTop: spacing.sm }}>
-        <Text variant="small" tone="subtle">Tap and drag to see a day</Text>
+        <Text variant="small" tone="subtle">Touch and slide to see a day</Text>
         <Text variant="small" tone="subtle">NGX · daily close</Text>
       </Row>
+    </View>
+  )
+}
+
+// Smooth curve through the points without overshoot (monotone cubic,
+// Fritsch–Carlson) — reads calmer than straight segments and never draws a
+// fake peak/dip between two days.
+function smoothPath(xs: number[], ys: number[]): string {
+  const n = xs.length
+  if (n < 3) return xs.map((x, i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${ys[i].toFixed(1)}`).join(' ')
+  const d: number[] = [], m: number[] = new Array(n)
+  for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]))
+  m[0] = d[0]; m[n - 1] = d[n - 2]
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i] }
+  }
+  let out = `M${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`
+  for (let i = 0; i < n - 1; i++) {
+    const dx = (xs[i + 1] - xs[i]) / 3
+    out += ` C${(xs[i] + dx).toFixed(1)} ${(ys[i] + m[i] * dx).toFixed(1)} ${(xs[i + 1] - dx).toFixed(1)} ${(ys[i + 1] - m[i + 1] * dx).toFixed(1)} ${xs[i + 1].toFixed(1)} ${ys[i + 1].toFixed(1)}`
+  }
+  return out
+}
+
+// The line itself — memoised so scrubbing never re-renders the SVG.
+const ChartLines = memo(function ChartLines({ line, area, W, H, color }: { line: string; area: string; W: number; H: number; color: string }) {
+  return (
+    <Svg width={W} height={H}>
+      <Path d={area} fill={color} fillOpacity={0.08} />
+      <Path d={line} stroke={color} strokeWidth={2.25} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+    </Svg>
+  )
+})
+
+// Scrubbing: the responder grabs the touch immediately (a tap shows that day);
+// once the finger moves sideways it locks in and the page can't steal it, while
+// a mostly-vertical drag is handed back so the page still scrolls. Only a thin
+// crosshair + dot move (plain Views), with a light haptic tick per day crossed.
+function ScrubChart({ pts, lo, hi, W, H, lineColor, onSelect }: {
+  pts: Candle[]; lo: number; hi: number; W: number; H: number; lineColor: string
+  onSelect: (i: number | null) => void
+}) {
+  const n = pts.length
+  const PAD_Y = 10
+  const geo = useMemo(() => {
+    const xs = pts.map((_, i) => (n === 1 ? W / 2 : (i / (n - 1)) * W))
+    const ys = pts.map((p) => PAD_Y + (1 - (p.c - lo) / (hi - lo)) * (H - PAD_Y * 2))
+    const line = smoothPath(xs, ys)
+    const area = `${line} L${xs[n - 1].toFixed(1)} ${H} L${xs[0].toFixed(1)} ${H} Z`
+    return { xs, ys, line, area }
+  }, [pts, lo, hi, W, H, n])
+
+  const [idx, setIdx] = useState<number | null>(null)
+  const originX = useRef(0)
+  const startX = useRef(0)
+  const startY = useRef(0)
+  const locked = useRef(false)
+  const lastIdx = useRef<number | null>(null)
+  const boxRef = useRef<View>(null)
+
+  const pick = (pageX: number) => {
+    const px = pageX - originX.current
+    const i = Math.max(0, Math.min(n - 1, Math.round((px / W) * (n - 1))))
+    if (i !== lastIdx.current) {
+      lastIdx.current = i
+      setIdx(i)
+      onSelect(i)
+      Haptics.selectionAsync().catch(() => {})
+    }
+  }
+  const clear = () => { lastIdx.current = null; locked.current = false; setIdx(null); onSelect(null) }
+
+  return (
+    <View
+      ref={boxRef}
+      onLayout={() => boxRef.current?.measureInWindow((x) => { originX.current = x })}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderGrant={(e) => {
+        // Re-measure: the page may have scrolled since layout.
+        boxRef.current?.measureInWindow((x) => { originX.current = x })
+        startX.current = e.nativeEvent.pageX
+        startY.current = e.nativeEvent.pageY
+        locked.current = false
+        pick(e.nativeEvent.pageX)
+      }}
+      onResponderMove={(e) => {
+        const { pageX, pageY } = e.nativeEvent
+        if (!locked.current && Math.abs(pageX - startX.current) > 4 && Math.abs(pageX - startX.current) >= Math.abs(pageY - startY.current)) {
+          locked.current = true
+        }
+        pick(pageX)
+      }}
+      // Keep the gesture once the user is scrubbing sideways.
+      onResponderTerminationRequest={() => !locked.current}
+      onResponderRelease={clear}
+      onResponderTerminate={clear}
+      style={{ width: W, height: H }}
+    >
+      <ChartLines line={geo.line} area={geo.area} W={W} H={H} color={lineColor} />
+      {idx != null && (
+        <>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, width: 1, left: geo.xs[idx] - 0.5, backgroundColor: colors.textMuted, opacity: 0.6 }} />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute', width: 12, height: 12, borderRadius: 6,
+              left: geo.xs[idx] - 6, top: geo.ys[idx] - 6,
+              backgroundColor: lineColor, borderWidth: 2, borderColor: colors.bg,
+            }}
+          />
+        </>
+      )}
     </View>
   )
 }

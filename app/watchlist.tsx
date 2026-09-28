@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { useWatchlistStore } from '@/store/watchlistStore'
-import { Text, Row, Stack, Button, Icon, Loader, toast } from '@/ui'
+import { Text, Row, Stack, Button, Icon, Loader, toast, SkeletonList } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { naira, pct } from '@/lib/format'
 import { StockLogo } from '@/components/StockLogo'
@@ -42,7 +42,7 @@ export default function WatchlistScreen() {
       </Row>
 
       {loading && symbols.length === 0 ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Loader size={56} /></View>
+        <SkeletonList rows={6} />
       ) : symbols.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl }}>
           <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md }}>
@@ -79,7 +79,7 @@ export default function WatchlistScreen() {
                       <Text variant="small" tone="muted" numberOfLines={1}>{s.name}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text variant="bodyStrong">{s.price > 0 ? naira(s.price) : '—'}</Text>
+                      <Text variant="bodyStrong">{s.price > 0 ? naira(s.price) : '-'}</Text>
                       {s.price > 0 && (
                         <Row gap="xs" align="center">
                           <Icon name={up ? 'solar:arrow-up-bold' : 'solar:arrow-down-bold'} size={10} color={up ? colors.positive : colors.negative} />

@@ -19,7 +19,7 @@ export default function AccountScreen() {
   const { user, signOut, kycStatus, cacsStatus, pacAccountId, cscsNumber } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId, cscsNumber: s.cscsNumber })))
   const [confirmOut, setConfirmOut] = useState(false)
 
-  const email = user?.email ?? '—'
+  const email = user?.email ?? '-'
 
   // Statuses only turn green once PAC has approved the account on the partner
   // dashboard (cacs_status = approved). Until then KYC reads "Under review" and
@@ -50,6 +50,9 @@ export default function AccountScreen() {
   const mode = useThemeStore((st) => st.mode)
   // Tabs stay mounted: animate the header rays only while Account is visible.
   const [focused, setFocused] = useState(true)
+  // Stop the header animation once it's scrolled out of view (only flips
+  // state when crossing the threshold, so scrolling doesn't re-render).
+  const [headerVisible, setHeaderVisible] = useState(true)
   useFocusEffect(useCallback(() => {
     setFocused(true)
     setStatusBarStyle('light')
@@ -63,10 +66,18 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: HEADER_BG }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={100}
+        onScroll={(e) => {
+          const visible = e.nativeEvent.contentOffset.y < 260
+          if (visible !== headerVisible) setHeaderVisible(visible)
+        }}
+      >
 
         {/* ── Header (black). Animation slot: render the background animation
-            as the FIRST child of this View with StyleSheet.absoluteFill — the
+            as the FIRST child of this View with StyleSheet.absoluteFill, the
             content below sits on top of it. ── */}
         <View style={{ backgroundColor: HEADER_BG, paddingBottom: spacing['2xl'], overflow: 'hidden' }}>
           {/* Emerald + gold shard stream behind the header content (React Bits
@@ -78,14 +89,14 @@ export default function AccountScreen() {
               accentColor="#EAB308"
               density={1.5}
               shardSize={1.1}
-              speed={1}
-              spin={1}
+              speed={0.55}
+              spin={0.5}
+              fps={30}
               spread={1}
               depth={1}
               stretch={1}
               glow={1}
-              bloom={0.5}
-              paused={!focused}
+              paused={!focused || !headerVisible}
             />
           </ErrorBoundary>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.md, height: 56 }}>
@@ -158,7 +169,7 @@ export default function AccountScreen() {
           </Group>
 
           <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing['2xl'] }}>
-            ETICO — by Moneta Capital Investment Limited
+            ETICO by Moneta Capital Investment Limited
           </Text>
           <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs }}>
             v1.0.0

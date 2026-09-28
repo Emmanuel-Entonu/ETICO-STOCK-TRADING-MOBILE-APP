@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { View, Pressable } from 'react-native'
 import { MotiView } from 'moti'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Text, Icon } from '@/ui'
+import { Text, Icon, SkeletonRow } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { naira, pct } from '@/lib/format'
 import type { PacMarketData } from '@/lib/pacApi'
@@ -81,7 +81,7 @@ export function RiskDial({ marketData, onViewAll, onOpenStock }: {
         {/* First three stocks of the mix, live */}
         <View style={{ marginTop: spacing.md }}>
           {inMix.length === 0 ? (
-            <Text variant="small" tone="subtle" style={{ paddingVertical: spacing.md }}>Loading prices…</Text>
+            <View>{[0, 1, 2].map((i) => <SkeletonRow key={i} />)}</View>
           ) : inMix.slice(0, 3).map((m, i) => {
             const up = (m.changePercent ?? 0) >= 0
             return (

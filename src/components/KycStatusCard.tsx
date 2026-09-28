@@ -29,7 +29,7 @@ export function KycStatusCard({ style }: { style?: object }) {
       <Notice
         tone="error"
         title="Verification unsuccessful"
-        body="We couldn’t verify your account. Fix the items below and resubmit — it only takes a few minutes."
+        body="We couldn’t verify your account. Fix the items below and resubmit. It only takes a few minutes."
         action={{ label: 'Redo KYC', onPress: goKyc }}
         style={style}
       >
@@ -53,7 +53,7 @@ export function KycStatusCard({ style }: { style?: object }) {
         tone="warning"
         icon="solar:clock-circle-bold"
         title="Your details are under review"
-        body="We’re verifying your account — usually 1–2 business days. We’ll notify you the moment you can start investing."
+        body="We’re verifying your account. This usually takes 1–2 business days. We’ll notify you the moment you can start investing."
         style={style}
       >
         <Steps current={1} labels={['Details submitted', 'Account review', 'Start investing']} />
@@ -67,7 +67,7 @@ export function KycStatusCard({ style }: { style?: object }) {
         tone="info"
         icon="solar:shield-user-bold"
         title="Verification needed to invest"
-        body="You skipped KYC. Complete it (about 5 minutes with your BVN) — after you submit, your account is reviewed, usually within 1–2 business days."
+        body="You skipped KYC. Complete it (about 5 minutes with your BVN). After you submit, your account is reviewed, usually within 1–2 business days."
         action={{ label: 'Continue verification', onPress: goKyc }}
         style={style}
       />
@@ -79,7 +79,7 @@ export function KycStatusCard({ style }: { style?: object }) {
       tone="info"
       icon="solar:shield-user-bold"
       title="Complete your KYC to start investing"
-      body="Verify your identity with your BVN — about 5 minutes. After you submit, your account is reviewed, usually within 1–2 business days."
+      body="Verify your identity with your BVN in about 5 minutes. After you submit, your account is reviewed, usually within 1–2 business days."
       action={{ label: 'Start verification', onPress: goKyc }}
       style={style}
     />

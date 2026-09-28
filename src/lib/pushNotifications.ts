@@ -190,11 +190,11 @@ export async function syncKycReminders(userId: string, kycStatus: string | null 
 
     const channel = Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}
     const series = want === 'kyc-redo'
-      ? [{ at: 2 * DAY, title: 'Finish your verification', body: 'Your account couldn’t be verified yet. Fix the highlighted details and resubmit — it only takes a few minutes.' }]
+      ? [{ at: 2 * DAY, title: 'Finish your verification', body: 'Your account couldn’t be verified yet. Fix the highlighted details and resubmit. It only takes a few minutes.' }]
       : [
           { at: 1 * DAY, title: 'Verify your identity to start investing', body: 'It takes about 5 minutes with your BVN. You’ll be able to invest once your account is approved.' },
           { at: 3 * DAY, title: 'Your ETICO account is almost ready', body: 'Complete your KYC to open your trading account and start building your portfolio.' },
-          { at: 7 * DAY, title: 'Still want to invest ethically?', body: 'Finish verifying your identity — we’ll take it from there.' },
+          { at: 7 * DAY, title: 'Still want to invest ethically?', body: 'Finish verifying your identity and we’ll take it from there.' },
         ]
     for (const s of series) {
       await Notifications.scheduleNotificationAsync({

@@ -35,7 +35,7 @@ const ID_TYPES = [
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
   2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
-  3: { title: 'Next of kin',            subtitle: 'A contact and your mother’s maiden name — required by the exchange.' },
+  3: { title: 'Next of kin',            subtitle: 'A contact and your mother’s maiden name, required by the exchange.' },
   4: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we take your photo.' },
   5: { title: 'Take a selfie',          subtitle: 'A quick photo to confirm it’s really you. Look at the camera.' },
 }
@@ -308,7 +308,7 @@ export default function KycScreen() {
   function validateStep2(): boolean {
     const errs: Record<string, string> = {}
     if (!bvnProfile?.nin || !/^\d{11}$/.test(idNumber)) {
-      errs.idNumber = 'Your BVN record has no NIN attached. Link your NIN to your BVN at your bank, then try again — or contact support.'
+      errs.idNumber = 'Your BVN record has no NIN attached. Link your NIN to your BVN at your bank, then try again. You can also contact support.'
     }
     if (bankName.trim().length < 2) errs.bankName = 'Select your settlement bank'
     if (!/^\d{10}$/.test(accountNumber)) errs.accountNumber = 'Account number must be 10 digits'
@@ -560,7 +560,7 @@ export default function KycScreen() {
                 {/* OTP entry */}
                 {bvnRef && !bvnDone && (
                   <MotiView from={{ opacity: 0, translateY: 8 }} animate={{ opacity: 1, translateY: 0 }} style={{ marginBottom: spacing['2xl'] }}>
-                    <Row2 label={otpWaitSec > 0 ? `Code sent — ready in ${otpWaitSec}s` : 'Enter the 6-digit code sent to your BVN phone'} />
+                    <Row2 label={otpWaitSec > 0 ? `Code sent. Ready in ${otpWaitSec}s` : 'Enter the 6-digit code sent to your BVN phone'} />
                     <OtpBoxes
                       value={otp}
                       disabled={otpLoading}
@@ -683,7 +683,7 @@ export default function KycScreen() {
             {step === 3 && (
               <View>
                 <UField
-                  label="Next of kin — full name"
+                  label="Next of kin's full name"
                   value={nextOfKinName}
                   onChangeText={(v: string) => { setNextOfKinName(v); clearErr('nextOfKinName') }}
                   placeholder="Full name of your next of kin"
@@ -691,7 +691,7 @@ export default function KycScreen() {
                   error={fieldErr.nextOfKinName}
                 />
                 <UField
-                  label="Next of kin — phone number"
+                  label="Next of kin's phone number"
                   value={nextOfKinPhone}
                   onChangeText={(v: string) => { setNextOfKinPhone(v); clearErr('nextOfKinPhone') }}
                   placeholder="e.g. 08012345678"
@@ -736,7 +736,7 @@ export default function KycScreen() {
                   {bvnProfile?.stateOfOrigin ? <ReviewRow label="State of origin" value={bvnProfile.stateOfOrigin} /> : null}
                   {bvnProfile?.lgaOfOrigin ?   <ReviewRow label="LGA of origin" value={bvnProfile.lgaOfOrigin} /> : null}
                   <ReviewRow label="BVN" value={bvn ? `••••••${bvn.slice(-3)}` : 'Not provided'} />
-                  <ReviewRow label="NIN" value={idNumber ? `•••••••${idNumber.slice(-4)}` : '—'} />
+                  <ReviewRow label="NIN" value={idNumber ? `•••••••${idNumber.slice(-4)}` : '-'} />
                   <ReviewRow label="Settlement bank" value={bankName} />
                   <ReviewRow label="Account number" value={accountNumber} />
                   <ReviewRow label="Account name" value={accountName} />
@@ -937,7 +937,7 @@ function ReviewRow({ label, value, last }: { label: string; value: string; last?
   return (
     <View style={[styles.listRow(), !last && styles.listRowDivider()]}>
       <Text variant="small" tone="muted" style={{ flex: 1 }}>{label}</Text>
-      <Text variant="bodyStrong" style={{ flex: 2, textAlign: 'right' }} numberOfLines={1}>{value || '—'}</Text>
+      <Text variant="bodyStrong" style={{ flex: 2, textAlign: 'right' }} numberOfLines={1}>{value || '-'}</Text>
     </View>
   )
 }

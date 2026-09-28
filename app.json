@@ -28,7 +28,8 @@
       [
         "expo-notifications",
         {
-          "color": "#DAA92F"
+          "color": "#DAA92F",
+          "mode": "production"
         }
       ],
       [

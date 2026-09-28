@@ -113,7 +113,7 @@ function GroundShadow({ cx, cy, s, w = 3.2, h = 1.1 }: {
 function ChartUpArt({ size, palette }: { size: number; palette: IsoPalette }) {
   const s = size / 5.4
   const cx = size / 2
-  const cy = size * 0.65        // was 0.80 — anchor higher on the canvas
+  const cy = size * 0.65        // was 0.80, anchor higher on the canvas
   const pal = PALETTES[palette]
 
   const bars = [
@@ -141,7 +141,7 @@ function ChartUpArt({ size, palette }: { size: number; palette: IsoPalette }) {
 function StackArt({ size, palette }: { size: number; palette: IsoPalette }) {
   const s = size / 4.8
   const cx = size / 2
-  const cy = size * 0.48        // was 0.62 — anchor higher on the canvas
+  const cy = size * 0.48        // was 0.62, anchor higher on the canvas
   const pal = PALETTES[palette]
 
   const specs: { pos: Vec; face: FaceSet }[] = [
@@ -153,7 +153,7 @@ function StackArt({ size, palette }: { size: number; palette: IsoPalette }) {
 
   // Composition spans 2 units × 2 units on the ground plus 1 unit high.
   // Iso-project the centroid to figure out where to plant it on the canvas.
-  const originX = cx - 0 * ISO.x * s // Composition is roughly symmetric around (1, 0.5) — good enough
+  const originX = cx - 0 * ISO.x * s // Composition is roughly symmetric around (1, 0.5): good enough
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <GroundShadow cx={cx + s * 0.3} cy={cy + s * 1.7} s={s} w={2.4} h={0.7} />
@@ -176,7 +176,7 @@ function DocumentArt({ size, palette }: { size: number; palette: IsoPalette }) {
   // top face to place the slab visually anchored higher in the canvas.
   const centroidIso = project(0, 0, s, [1.5, 1.5, 0.6])
   const cx = size / 2 - centroidIso[0]
-  const cy = size * 0.40 - centroidIso[1]     // was 0.5 — shift up
+  const cy = size * 0.40 - centroidIso[1]     // was 0.5, shift up
 
   const q = p(cx, cy, s)
   const body = { pos: [0, 0, 0] as Vec, size: [3, 3, 0.6] as [number, number, number], face: pal[0] }
@@ -218,7 +218,7 @@ function CoinsArt({ size, palette }: { size: number; palette: IsoPalette }) {
   const step = t
 
   // Bottom coin's TOP surface Y — everything else stacks above.
-  const bottomTopY = size * 0.68 - t          // was 0.80 — shift stack up
+  const bottomTopY = size * 0.68 - t          // was 0.80, shift stack up
   const bottomBotY = bottomTopY + t
 
   function drawCoin(topY: number, face: FaceSet, key: string) {

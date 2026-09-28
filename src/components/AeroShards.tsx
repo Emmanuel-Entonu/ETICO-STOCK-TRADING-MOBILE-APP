@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppState, StyleSheet, View, type LayoutChangeEvent } from 'react-native'
-import {
-  Atlas, Blur, Canvas, Group, Paint, Path, Skia,
-  useColorBuffer, useRSXformBuffer, useRectBuffer, useTexture,
-} from '@shopify/react-native-skia'
-import { useFrameCallback, useSharedValue } from 'react-native-reanimated'
+import { Atlas, Canvas, Group, Path, Skia, useTexture } from '@shopify/react-native-skia'
+import { makeMutable, useFrameCallback } from 'react-native-reanimated'
 
 // AeroShards — React Bits <AeroShards/> (placement "full", flow "stream",
 // material "pearl") ported to React Native.
@@ -13,22 +10,28 @@ import { useFrameCallback, useSharedValue } from 'react-native-reanimated'
 // doesn't exist in React Native. This port keeps its motion model — the same
 // "full" stream path + arc-length table, lane spread, depth layering,
 // perspective, depth-scaled size, per-shard roll and the depth-fog colour mix —
-// and draws every shard as one sprite of a Skia <Atlas> (a single draw call),
-// with a blurred copy underneath for the bloom. Transforms and colours are
-// rewritten in place on the UI thread each frame.
+// and draws every shard as one sprite of a Skia <Atlas> (a single draw call).
+//
+// Performance (2026-09-28): the first version looped all shards THREE times a
+// frame (transform, colour, roll frame — one mapper each), drew twice and ran a
+// full-screen blur for the bloom; on Android that made the Account page lag.
+// Now: ONE loop per frame writes all three buffers, per-shard constants are
+// precomputed, trig is avoided where the maths allows (rotation comes straight
+// from the unit tangent, powers by repeated squaring), ~480 shards instead of
+// 840, no blur pass, and the host pauses it when the header scrolls off-screen.
 //
 // Dropped vs the web version: cursor repel / hold-to-gather / click ripples
 // (the header has buttons on top and no cursor), dither/ASCII effects, film
-// grain and chromatic aberration.
+// grain, chromatic aberration and the blurred bloom.
 //
-// iOS worklet rule: everything the frame worklets touch is a plain number /
-// array captured as a constant, or a helper marked 'worklet' — never the
-// `colors` theme proxy or a plain JS function.
+// iOS worklet rule: everything the frame worklet touches is a plain number /
+// array captured as a constant — never the `colors` theme proxy or a plain JS
+// function.
 
 interface Props {
   shardColor?: string
   accentColor?: string
-  /** Shard count multiplier (1 = ~560 shards). */
+  /** Shard count multiplier (1 = ~320 shards). */
   density?: number
   shardSize?: number
   speed?: number
@@ -37,8 +40,9 @@ interface Props {
   depth?: number
   stretch?: number
   glow?: number
-  bloom?: number
-  /** Stop animating (e.g. host screen not focused). */
+  /** Frame-rate cap for the animation (the rest of the app is unaffected). */
+  fps?: number
+  /** Stop animating (e.g. host screen not focused / header off-screen). */
   paused?: boolean
 }
 
@@ -98,7 +102,7 @@ export default function AeroShards({
   depth = 1,
   stretch = 1,
   glow = 1,
-  bloom = 0.5,
+  fps = 30,
   paused = false,
 }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -113,18 +117,36 @@ export default function AeroShards({
     return () => sub.remove()
   }, [])
 
-  const count = Math.max(80, Math.round(560 * density))
+  const count = Math.max(80, Math.round(320 * density))
+  const W = size.width
+  const H = size.height
+  const aspect = H > 0 ? W / H : 1.6
+  const pathLength = Math.sqrt((2.44 * aspect) ** 2 + 5)
 
-  const seeds = useMemo(() => {
-    const phase: number[] = [], lane: number[] = [], dep: number[] = [], scale: number[] = []
+  // Everything per shard that doesn't change over time, computed once.
+  const k = useMemo(() => {
+    const phase0: number[] = [], lane: number[] = [], loose: number[] = [], zOff: number[] = []
+    const wave: number[] = [], zWave: number[] = [], scaleShape: number[] = []
+    const rollBase: number[] = [], rollRate: number[] = [], mixA: number[] = []
     for (let i = 0; i < count; i++) {
-      phase.push(unitFloat(Math.imul(i, 1664525) + 1013904223))
-      lane.push(unitFloat(Math.imul(i, 2246822519) + 3266489917))
-      dep.push(unitFloat(Math.imul(i, 668265263) + 374761393))
-      scale.push(unitFloat(Math.imul(i, 1597334677) + 3812015801))
+      const sp = unitFloat(Math.imul(i, 1664525) + 1013904223)
+      const sl = unitFloat(Math.imul(i, 2246822519) + 3266489917)
+      const sd = unitFloat(Math.imul(i, 668265263) + 374761393)
+      const ss = unitFloat(Math.imul(i, 1597334677) + 3812015801)
+      const signed = sl * 2 - 1
+      phase0.push(sp)
+      lane.push((signed < 0 ? -1 : 1) * Math.pow(Math.abs(signed), 0.72))
+      loose.push(1 + (sd > 0.92 ? (sd - 0.92) / 0.08 : 0) * 0.72)
+      zOff.push((sd * 2 - 1) * 0.5 * depth)
+      wave.push(sd * 12)
+      zWave.push(sl * 8)
+      scaleShape.push(0.46 + ss * 0.58 + Math.pow(ss, 12) * 1.55)
+      rollBase.push(sl * 2 * Math.PI)
+      rollRate.push((-1.5 + 3.2 * sd) * spin * 2.4)
+      mixA.push(sl)
     }
-    return { phase, lane, dep, scale }
-  }, [count])
+    return { phase0, lane, loose, zOff, wave, zWave, scaleShape, rollBase, rollRate, mixA }
+  }, [count, depth, spin])
 
   const base = hexToRgb(shardColor)
   const accent = hexToRgb(accentColor)
@@ -146,126 +168,116 @@ export default function AeroShards({
     { width: TEX_W * ROLL_FRAMES, height: TEX_H },
   )
 
-  // Seconds of animation (only advances while running).
-  const time = useSharedValue(0)
-  const frame = useFrameCallback((info) => {
-    'worklet'
-    const dt = info.timeSincePreviousFrame ?? 16
-    time.value += Math.min(dt, 50) / 1000
-  }, false)
-  const running = !paused && appActive && size.width > 0
-  useEffect(() => { frame.setActive(running) }, [running, frame])
+  // Draw buffers, mutated in place on the UI thread.
+  const buf = useMemo(() => ({
+    sprites: makeMutable(Array.from({ length: count }, () => Skia.XYWHRect(0, 0, TEX_W, TEX_H))),
+    transforms: makeMutable(Array.from({ length: count }, () => Skia.RSXform(0, 0, 0, 0))),
+    tints: makeMutable(Array.from({ length: count }, () => Skia.Color('transparent'))),
+  }), [count])
 
-  const W = size.width
-  const H = size.height
-  const aspect = H > 0 ? W / H : 1.6
-  const pathLength = Math.sqrt((2.44 * aspect) ** 2 + 5)
-  // World size of a shard: in the original, screen height = 2 world units.
   const worldShard = 0.042 * shardSize
   const pxPerWorld = H / 2
-  const { phase: sPhase, lane: sLane, dep: sDep, scale: sScale } = seeds
+  const glowF = 0.15 + glow * 0.16
+  const { phase0, lane, loose, zOff, wave, zWave, scaleShape, rollBase, rollRate, mixA } = k
+  const { sprites, transforms, tints } = buf
+  const clock = useMemo(() => makeMutable(0), [])
+  // Frame cap: time keeps advancing with the real clock (motion speed is
+  // unchanged), but shards are only recomputed + redrawn every 1/fps seconds.
+  const pending = useMemo(() => makeMutable(0), [])
+  const step = 1 / Math.max(10, Math.min(60, fps))
 
-  // Roll → which width frame of the sprite sheet this shard shows.
-  const sprites = useRectBuffer(count, (val, i) => {
+  const frame = useFrameCallback((info) => {
     'worklet'
-    const roll = sLane[i] * 2 * 3.14159265359 + time.value * (-1.5 + 3.2 * sDep[i]) * spin * 2.4
-    const j = Math.min(5, Math.round((1 - Math.abs(Math.cos(roll))) * 5))
-    val.setXYWH(j * 24, 0, 24, 64)
-  })
-
-  const transforms = useRSXformBuffer(count, (val, i) => {
-    'worklet'
-    const t = time.value
+    const dt = Math.min(info.timeSincePreviousFrame ?? 16, 50) / 1000
+    const t = clock.value + dt
+    clock.value = t
+    const acc = pending.value + dt
+    // Small tolerance so a 60Hz display lands exactly on every 2nd frame.
+    if (acc < step - 0.004) { pending.value = acc; return }
+    pending.value = 0
     const PI = 3.14159265359
-    // Position along the path (transport), same for every shard, plus its seed.
-    let phase = sPhase[i] + (t * 0.16 * speed) / pathLength
-    phase = phase - Math.floor(phase)
-    const scaled = Math.min(phase, 0.999999) * 31
-    const k = Math.min(Math.floor(scaled), 30)
-    const u = FULL_ARC[k] + (FULL_ARC[k + 1] - FULL_ARC[k]) * (scaled - k)
-    // fullPath()
-    const px = -aspect * 1.22 + aspect * 2.44 * u
-    const py = Math.sin((u * 1.72 - 0.2) * PI) * 0.54 + Math.sin(u * PI * 3) * 0.12
-    const pz = Math.cos(u * PI * 2 - 0.7) * 0.22
-    let dx = aspect * 2.44
-    let dy = Math.cos((u * 1.72 - 0.2) * PI) * 1.72 * PI * 0.54 + Math.cos(u * PI * 3) * PI * 3 * 0.12
-    const dl = Math.sqrt(dx * dx + dy * dy) || 1
-    dx /= dl; dy /= dl
-    // Lane spread across the flow, wider mid-stream; a few loose shards stray further.
-    const signedLane = sLane[i] * 2 - 1
-    const lane = (signedLane < 0 ? -1 : 1) * Math.pow(Math.abs(signedLane), 0.72)
-    const widthProfile = 0.46 + Math.pow(Math.max(Math.sin(phase * PI), 0), 0.72) * 0.54
-    const loose = sDep[i] > 0.92 ? (sDep[i] - 0.92) / 0.08 : 0
-    const flowWave = Math.sin(phase * 37.699 + sDep[i] * 12)
-    const laneWidth = (lane * 0.56 + flowWave * 0.055) * 0.62 * spread * widthProfile * (1 + loose * 0.72)
-    const wx = px + -dy * laneWidth
-    const wy = py + dx * laneWidth
-    const wz = pz + (sDep[i] * 2 - 1) * 0.5 * depth + Math.cos(phase * 31.4159 + sLane[i] * 8) * 0.06
-    // Perspective + depth-scaled size (the shader's depthScale / scaleShape).
-    const persp = 1 / Math.max(0.62, 1 - wz * 0.34)
-    const depthT = Math.min(Math.max(wz * 0.62 + 0.5, 0), 1)
-    const depthScale = 0.56 + (1.58 - 0.56) * depthT
-    const scaleShape = 0.46 + sScale[i] * 0.58 + Math.pow(sScale[i], 12) * 1.55
-    // Roll foreshortens the shard's width — RSXform is a uniform scale, so we
-    // fold that into the tint (see colour buffer) and keep the size here.
-    const lengthPx = worldShard * scaleShape * depthScale * 1.26 * stretch * 2 * pxPerWorld * persp
-    const s = lengthPx / TEX_H
-    // World → screen (y up → y down).
-    const sx = (wx * persp / aspect * 0.5 + 0.5) * W
-    const sy = (0.5 - wy * persp * 0.5) * H
-    // Texture's long axis (0,1) → screen flow direction (dx, -dy).
-    const theta = Math.atan2(-dx, -dy)
-    const sc = Math.cos(theta) * s
-    const ss = Math.sin(theta) * s
-    const cx = TEX_W / 2
-    const cy = TEX_H / 2
-    val.set(sc, ss, sx - (sc * cx - ss * cy), sy - (ss * cx + sc * cy))
-  })
+    const travel = (t * 0.16 * speed) / pathLength
+    const xf = transforms.value
+    const col = tints.value
+    const spr = sprites.value
+    for (let i = 0; i < count; i++) {
+      // ── Position along the "full" stream path ──
+      let phase = phase0[i] + travel
+      phase -= Math.floor(phase)
+      const scaled = (phase < 0.999999 ? phase : 0.999999) * 31
+      const a0 = Math.floor(scaled)
+      const ai = a0 > 30 ? 30 : a0
+      const u = FULL_ARC[ai] + (FULL_ARC[ai + 1] - FULL_ARC[ai]) * (scaled - ai)
+      const ang1 = (u * 1.72 - 0.2) * PI
+      const ang3 = u * PI * 3
+      const px = -aspect * 1.22 + aspect * 2.44 * u
+      const py = Math.sin(ang1) * 0.54 + Math.sin(ang3) * 0.12
+      const pz = Math.cos(u * PI * 2 - 0.7) * 0.22
+      let dx = aspect * 2.44
+      let dy = Math.cos(ang1) * 1.72 * PI * 0.54 + Math.cos(ang3) * PI * 3 * 0.12
+      const dl = Math.sqrt(dx * dx + dy * dy)
+      dx /= dl; dy /= dl
+      // ── Lane spread + depth ──
+      const sp = Math.sin(phase * PI)
+      const widthProfile = 0.46 + Math.sqrt(sp > 0 ? sp : 0) * 0.54
+      const laneWidth = (lane[i] * 0.56 + Math.sin(phase * 37.699 + wave[i]) * 0.055) * 0.62 * spread * widthProfile * loose[i]
+      const wx = px - dy * laneWidth
+      const wy = py + dx * laneWidth
+      const wz = pz + zOff[i] + Math.cos(phase * 31.4159 + zWave[i]) * 0.06
+      const pd = 1 - wz * 0.34
+      const persp = 1 / (pd > 0.62 ? pd : 0.62)
+      let depthT = wz * 0.62 + 0.5
+      depthT = depthT < 0 ? 0 : depthT > 1 ? 1 : depthT
+      const lengthPx = worldShard * scaleShape[i] * (0.56 + 1.02 * depthT) * 1.26 * stretch * 2 * pxPerWorld * persp
+      const sc = lengthPx / TEX_H
+      // Texture long axis → screen flow direction (dx, -dy): cos θ = -dy, sin θ = -dx.
+      const scos = -dy * sc
+      const ssin = -dx * sc
+      const sx = (wx * persp / aspect * 0.5 + 0.5) * W
+      const sy = (0.5 - wy * persp * 0.5) * H
+      xf[i].set(scos, ssin, sx - (scos * 12 - ssin * 32), sy - (ssin * 12 + scos * 32))
 
-  const tints = useColorBuffer(count, (val, i) => {
-    'worklet'
-    const t = time.value
-    const PI = 3.14159265359
-    let phase = sPhase[i] + (t * 0.16 * speed) / pathLength
-    phase = phase - Math.floor(phase)
-    const scaled = Math.min(phase, 0.999999) * 31
-    const k = Math.min(Math.floor(scaled), 30)
-    const u = FULL_ARC[k] + (FULL_ARC[k + 1] - FULL_ARC[k]) * (scaled - k)
-    const wz = Math.cos(u * PI * 2 - 0.7) * 0.22 + (sDep[i] * 2 - 1) * 0.5 * depth
-    // Depth fog: far shards lean toward a dim accent, near ones to the shard colour.
-    const f = Math.min(Math.max((wz + 0.68) / 1.26, 0), 1)
-    const fog = f * f * (3 - 2 * f)
-    // Pearl roll: facets catch the key light as they turn.
-    const rollDir = -1.5 + 3.2 * sDep[i]
-    const roll = sLane[i] * 2 * PI + t * rollDir * spin * 2.4
-    const c = Math.cos(roll)
-    const facing = Math.abs(c)
-    const spec = Math.pow(Math.max(c, 0), 18) * glow
-    const fresnel = Math.pow(1 - facing, 4) * (0.15 + glow * 0.16)
-    const bright = (0.28 + facing * 0.62) * (0.42 + 0.58 * fog)
-    const mixA = sLane[i]
-    let r = (accent[0] * 0.52 + (base[0] - accent[0] * 0.52) * fog) * bright + hi[0] * spec * 0.9 + (base[0] + (accent[0] - base[0]) * mixA) * fresnel
-    let g = (accent[1] * 0.52 + (base[1] - accent[1] * 0.52) * fog) * bright + hi[1] * spec * 0.9 + (base[1] + (accent[1] - base[1]) * mixA) * fresnel
-    let b = (accent[2] * 0.52 + (base[2] - accent[2] * 0.52) * fog) * bright + hi[2] * spec * 0.9 + (base[2] + (accent[2] - base[2]) * mixA) * fresnel
-    // Soft shoulder instead of hard clipping (ACES-ish).
-    r = r / (1 + r * 0.35) * 1.3; g = g / (1 + g * 0.35) * 1.3; b = b / (1 + b * 0.35) * 1.3
-    // Taper at the path's ends so shards don't pop at the wrap seam.
-    const seam = Math.min(1, phase / 0.035) * Math.min(1, (1 - phase) / 0.035)
-    val[0] = Math.min(r, 1)
-    val[1] = Math.min(g, 1)
-    val[2] = Math.min(b, 1)
-    val[3] = (0.58 + 0.39 * fog) * seam
-  })
+      // ── Roll → sprite width frame + pearl lighting ──
+      const c = Math.cos(rollBase[i] + t * rollRate[i])
+      const facing = c < 0 ? -c : c
+      const fr = Math.round((1 - facing) * 5)
+      spr[i].setXYWH(fr * 24, 0, 24, 64)
+      let f = (wz + 0.68) / 1.26
+      f = f < 0 ? 0 : f > 1 ? 1 : f
+      const fog = f * f * (3 - 2 * f)
+      let spec = 0
+      if (c > 0) { const c2 = c * c; const c4 = c2 * c2; const c8 = c4 * c4; spec = c8 * c8 * c2 * glow }
+      const inv = 1 - facing
+      const inv2 = inv * inv
+      const fresnel = inv2 * inv2 * glowF
+      const bright = (0.28 + facing * 0.62) * (0.42 + 0.58 * fog)
+      const m = mixA[i]
+      let r = (accent[0] * 0.52 + (base[0] - accent[0] * 0.52) * fog) * bright + hi[0] * spec * 0.9 + (base[0] + (accent[0] - base[0]) * m) * fresnel
+      let g = (accent[1] * 0.52 + (base[1] - accent[1] * 0.52) * fog) * bright + hi[1] * spec * 0.9 + (base[1] + (accent[1] - base[1]) * m) * fresnel
+      let b = (accent[2] * 0.52 + (base[2] - accent[2] * 0.52) * fog) * bright + hi[2] * spec * 0.9 + (base[2] + (accent[2] - base[2]) * m) * fresnel
+      r = r / (1 + r * 0.35) * 1.3; g = g / (1 + g * 0.35) * 1.3; b = b / (1 + b * 0.35) * 1.3
+      const e1 = phase / 0.035
+      const e2 = (1 - phase) / 0.035
+      const seam = (e1 < 1 ? e1 : 1) * (e2 < 1 ? e2 : 1)
+      const ci = col[i]
+      ci[0] = r < 1 ? r : 1
+      ci[1] = g < 1 ? g : 1
+      ci[2] = b < 1 ? b : 1
+      ci[3] = (0.58 + 0.39 * fog) * seam
+    }
+    // One notify per buffer → one redraw per frame.
+    transforms.modify((v) => { 'worklet'; return v })
+    tints.modify((v) => { 'worklet'; return v })
+    sprites.modify((v) => { 'worklet'; return v })
+  }, false)
+
+  const running = !paused && appActive && size.width > 0
+  useEffect(() => { frame.setActive(running) }, [running, frame])
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
       {size.width > 0 && (
         <Canvas style={StyleSheet.absoluteFill}>
-          {bloom > 0 && (
-            <Group layer={<Paint opacity={Math.min(1, bloom * 1.2)} blendMode="plus"><Blur blur={7} mode="decal" /></Paint>}>
-              <Atlas image={texture} sprites={sprites} transforms={transforms} colors={tints} colorBlendMode="modulate" />
-            </Group>
-          )}
           <Atlas image={texture} sprites={sprites} transforms={transforms} colors={tints} colorBlendMode="modulate" />
         </Canvas>
       )}

@@ -17,7 +17,7 @@ const WHAT_HAPPENS = [
   'Your profile, watchlist and app preferences are scheduled for deletion.',
   'Your login is disabled and you are signed out on this device.',
   'Trading and wallet records required by law (SEC / anti-money-laundering) are retained for the mandated period, then permanently deleted.',
-  'Any settled cash should be withdrawn first — contact support if you need help.',
+  'Any settled cash should be withdrawn first. Contact support if you need help.',
 ]
 
 export default function DeleteAccountScreen() {

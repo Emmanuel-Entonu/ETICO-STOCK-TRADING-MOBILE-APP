@@ -11,7 +11,7 @@ import { MotiView } from 'moti'
 import { useAuthStore } from '@/store/authStore'
 import { syncWalletFunding, getVaTransactions, type VaTransaction } from '@/lib/monetaApi'
 import { supabase } from '@/lib/supabase'
-import { Text, Row, Button, Icon, Loader, toast } from '@/ui'
+import { Text, Row, Button, Icon, Loader, toast, Skeleton } from '@/ui'
 import { colors, spacing, radii, useThemedStyles } from '@/theme'
 import { naira } from '@/lib/format'
 
@@ -202,12 +202,14 @@ export default function WalletScreen() {
 
         {/* ── Provisioning ── */}
         {kycDone && !hasWallet && provisioning && (
-          <View style={styles.infoCard}>
-            <Loader size={48} />
-            <Text variant="bodyStrong" style={{ marginTop: spacing.md }}>Setting up your wallet…</Text>
-            <Text variant="small" tone="muted" align="center" style={{ marginTop: spacing.xs }}>
-              This only takes a moment.
-            </Text>
+          <View style={[styles.infoCard, { alignItems: 'stretch', gap: spacing.md }]}>
+            <Text variant="small" tone="muted">Setting up your wallet. This only takes a moment.</Text>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Skeleton width={90} height={12} />
+                <Skeleton width={i === 1 ? 130 : 110} height={14} />
+              </View>
+            ))}
           </View>
         )}
 
@@ -228,7 +230,7 @@ export default function WalletScreen() {
           <>
             {/* ── Virtual account: money available to move into the wallet ──
                 Shows va_available (reconciled deposits), NOT the raw Moneta VA
-                balance — Providus sweeps the VA to ~0, so that figure is always
+                balance: Providus sweeps the VA to ~0, so that figure is always
                 empty and misleading. va_available is what the user can actually
                 move to their trading wallet. */}
             <View style={styles.vaCard}>
@@ -271,16 +273,16 @@ export default function WalletScreen() {
             </Text>
 
             <View style={styles.detailCard}>
-              <DetailRow label="Bank" value={vaBank ?? '—'} />
+              <DetailRow label="Bank" value={vaBank ?? '-'} />
               <View style={styles.detailDivider} />
               <DetailRow
                 label="Account number"
-                value={vaNumber ?? '—'}
+                value={vaNumber ?? '-'}
                 onCopy={vaNumber ? () => copy('Account number', vaNumber) : undefined}
                 emphasize
               />
               <View style={styles.detailDivider} />
-              <DetailRow label="Account name" value={vaAccountName ?? '—'} />
+              <DetailRow label="Account name" value={vaAccountName ?? '-'} />
             </View>
 
             {/* ── Activity ── two feeds: real VA deposits, and wallet moves. */}
@@ -491,7 +493,7 @@ const makeStyles = () => StyleSheet.create({
   },
   vaBalance: {
     fontSize: 28,
-    lineHeight: 36,          // explicit, like balanceValue — required for iOS shrink-to-fit
+    lineHeight: 36,          // explicit, like balanceValue, required for iOS shrink-to-fit
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -0.5,

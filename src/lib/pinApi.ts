@@ -41,7 +41,7 @@ export async function resetPinWithPassword(email: string, password: string, newP
 
   const { data: pre } = await supabase.auth.getUser()
   const originalUserId = pre?.user?.id ?? null
-  if (!originalUserId) throw new Error('Session expired — please sign in again')
+  if (!originalUserId) throw new Error('Session expired. Please sign in again.')
 
   const { data: signed, error: authErr } = await supabase.auth.signInWithPassword({ email, password })
   if (authErr) {

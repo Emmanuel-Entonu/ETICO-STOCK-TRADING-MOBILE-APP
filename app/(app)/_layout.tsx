@@ -1,13 +1,16 @@
 import { Tabs } from 'expo-router'
 import { FloatingTabBar } from '@/components/FloatingTabBar'
+import { colors } from '@/theme'
 
 export default function AppLayout() {
   return (
     <Tabs
-      // fade: a quick cross-fade instead of a hard cut between tabs.
+      // No tab animation: switching tabs is instant (the cross-fade showed the
+      // navigator background between screens and felt slow). Tabs stay mounted
+      // after first visit, so coming back is immediate too.
       // freezeOnBlur: inactive tabs stop re-rendering on store updates (wallet
       // refreshes, market polls) so the visible screen keeps the frame budget.
-      screenOptions={{ headerShown: false, animation: 'fade', freezeOnBlur: true }}
+      screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: true, sceneStyle: { backgroundColor: colors.bg } }}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />

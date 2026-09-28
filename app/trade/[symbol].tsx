@@ -11,7 +11,7 @@ import { usePinStore } from '@/store/pinStore'
 import { useWatchlistStore } from '@/store/watchlistStore'
 import { validateOrder, getSecurityData, type PacValidationResult, type PacMarketData } from '@/lib/pacApi'
 import { validateQuantity, validatePrice, validateSymbol } from '@/lib/validation'
-import { Text, Row, Stack, Card, Button, Divider, OptionGroup, Icon, toast, Loader, Notice } from '@/ui'
+import { Text, Row, Stack, Card, Button, Divider, OptionGroup, Icon, toast, Loader, Notice, Skeleton } from '@/ui'
 import { colors, radii, spacing, typography, useThemedStyles } from '@/theme'
 import { naira, pct } from '@/lib/format'
 import { StockLogo } from '@/components/StockLogo'
@@ -225,12 +225,24 @@ export default function TradeScreen() {
 
   if (!stock) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', gap: 16, padding: spacing.xl }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, justifyContent: stockLoading ? 'flex-start' : 'center', alignItems: stockLoading ? 'stretch' : 'center', gap: 16, padding: spacing.xl }}>
         {stockLoading ? (
-          <>
-            <Loader size={28} />
-            <Text variant="body" tone="muted">Loading {symbol}…</Text>
-          </>
+          // Skeleton shaped like the trade page: header, price, chart, stats.
+          <View style={{ gap: spacing.lg, paddingTop: spacing.lg }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <Skeleton width={48} height={48} radius={24} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="35%" height={18} />
+                <Skeleton width="60%" height={12} />
+              </View>
+            </View>
+            <Skeleton width="50%" height={34} />
+            <Skeleton width="30%" height={14} />
+            <Skeleton height={220} radius={radii.lg} />
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              {[0, 1, 2, 3].map((i) => <Skeleton key={i} width="22%" height={40} radius={radii.md} />)}
+            </View>
+          </View>
         ) : stockError ? (
           <>
             <Text variant="body" tone="negative" align="center" selectable>Could not load {symbol}: {stockError}</Text>
@@ -437,7 +449,7 @@ export default function TradeScreen() {
                     title={cacsStatus === 'rejected' ? 'CSCS verification rejected' : 'CSCS account under review'}
                     subtitle={cacsStatus === 'rejected'
                       ? 'We couldn’t verify your account. Redo KYC to try again.'
-                      : 'Your account is being verified. Trading unlocks once it’s approved — usually 1–2 business days.'}
+                      : 'Your account is being verified. Trading unlocks once it’s approved, usually within 1–2 business days.'}
                     ctaLabel={cacsStatus === 'rejected' ? 'Redo KYC' : 'View status'}
                     onPress={() => router.push((cacsStatus === 'rejected' ? '/(auth)/kyc' : '/(app)') as never)}
                   />
@@ -449,7 +461,7 @@ export default function TradeScreen() {
                     title={walletBalance <= 0 ? 'Your wallet is empty' : 'Not enough in your wallet'}
                     subtitle={walletBalance <= 0
                       ? 'Fund your trading account to start trading.'
-                      : `You have ${naira(walletBalance)} — this order needs ${naira(estimatedTotal)}.`}
+                      : `You have ${naira(walletBalance)}, but this order needs ${naira(estimatedTotal)}.`}
                     ctaLabel="Fund trading account"
                     onPress={() => { setOrderSheetOpen(false); router.push('/wallet' as never) }}
                   />
@@ -529,7 +541,7 @@ export default function TradeScreen() {
           idempotencyRef.current = null
           setPinOpen(false)
           setConfirmOpen(false)
-          toast.warn('Trade canceled', 'PIN not entered — no order was placed.')
+          toast.warn('Trade canceled', 'PIN not entered, so no order was placed.')
         }}
         onVerified={async () => {
           if (!pacAccountId) return
@@ -715,11 +727,14 @@ function ConfirmSheet({
             </Card>
 
             {validating && (
-              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.bgMuted, borderColor: 'transparent' }}>
-                <Row gap="sm" align="center">
-                  <Loader size={18} />
-                  <Text variant="small" tone="muted">Calculating fees…</Text>
-                </Row>
+              <Card style={{ marginBottom: spacing.md, backgroundColor: colors.bgMuted, borderColor: 'transparent', gap: spacing.sm }}>
+                <Text variant="eyebrow" tone="muted">FEES & CHARGES</Text>
+                {[0, 1, 2].map((i) => (
+                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Skeleton width={i === 2 ? 70 : 110} height={12} />
+                    <Skeleton width={80} height={12} />
+                  </View>
+                ))}
               </Card>
             )}
             {validationError && (
@@ -740,7 +755,7 @@ function ConfirmSheet({
                 tone="error"
                 icon="solar:wallet-money-bold"
                 title="Not enough in your trading account"
-                body={`You have ${naira(walletCash)} available — ${naira(orderTotal - walletCash)} short for this order. Fund your trading account or lower the quantity.`}
+                body={`You have ${naira(walletCash)} available, which is ${naira(orderTotal - walletCash)} short for this order. Fund your trading account or lower the quantity.`}
                 style={{ marginBottom: spacing.md }}
               />
             )}

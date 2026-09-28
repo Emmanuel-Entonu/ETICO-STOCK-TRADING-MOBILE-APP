@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native'
-import { MotiView } from 'moti'
+import { Loader } from './Loader'
 import { colors, radii, spacing } from '@/theme'
 import { Text } from './Text'
 
@@ -46,22 +46,9 @@ export function Button({
       ]}
     >
       {loading ? (
-        // Skeleton-style loading: the button label becomes a pulsing bar
-        // instead of a rotating spinner. Consistent with the rest of the
-        // app's "if it's loading, show a skeleton" pattern.
-        <MotiView
-          from={{ opacity: 0.35 }}
-          animate={{ opacity: 0.75 }}
-          transition={{ type: 'timing', duration: 700, loop: true, repeatReverse: true }}
-          style={{
-            height: fontMap[size].fontSize + 2,
-            width: '55%',
-            borderRadius: 999,
-            backgroundColor: variant === 'primary' || variant === 'danger'
-              ? 'rgba(255,255,255,0.45)'
-              : colors.bgSubtle,
-          }}
-        />
+        // Loading on a button = the breathing ETICO mark (brand loader).
+        // Content areas use skeletons instead.
+        <Loader size={size === 'sm' ? 26 : size === 'md' ? 32 : 38} />
       ) : (
         <Text
           style={[fontMap[size], { color: textColor(variant, isDisabled) }]}

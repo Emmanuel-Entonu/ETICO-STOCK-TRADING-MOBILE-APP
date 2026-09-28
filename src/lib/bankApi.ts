@@ -28,7 +28,7 @@ export interface NameEnquiryResult {
 export async function resolveAccountName(params: {
   accountNumber: string       // 10-digit NUBAN
   institutionCode: string     // 6-digit NIBSS code (from NG_BANKS)
-  bvn: string                 // 11-digit BVN — required by the enquiry service
+  bvn: string                 // 11-digit BVN, required by the enquiry service
 }): Promise<NameEnquiryResult> {
   const res = await fetch(`${config.proxyBase}/api/account-name-enquiry`, {
     method: 'POST',

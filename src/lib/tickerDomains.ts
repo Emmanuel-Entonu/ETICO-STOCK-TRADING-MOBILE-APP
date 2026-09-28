@@ -107,7 +107,7 @@ export const TICKER_DOMAINS: Record<string, string> = {
   FIDSON:     'fidson.com',
   GLAXOSMITH: 'gsk.com',
   PHARMDEKO:  'pharmadekoplc.com',
-  TRANSEXPR:  '', // no reliable domain — falls back to initials
+  TRANSEXPR:  '', // no reliable domain, falls back to initials
 
   // ── Newly-tracked tickers ─────────────────────────────────
   // Banks

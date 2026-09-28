@@ -30,7 +30,7 @@ const MARKET_CODE = 'NGX'
 //   UBN          → UNIONBNK       FBNH         ↔ FIRSTHOLDCO
 //   MEDIAVISN, DANGFLOUR, GLAXOSMITH, IPWA, BRICNET, COURTVILLE — dropped
 //   (delisted or 404 in MDS security master)
-const TRACKED_SYMBOLS = Array.from(ETHICAL_TICKERS) // strictly ethical — cut from ~150
+const TRACKED_SYMBOLS = Array.from(ETHICAL_TICKERS) // strictly ethical, cut from ~150
 
 // A few tracked tickers trade under a different code in the MDS/PAC security
 // master than the display ticker (the plain code 404s as "Security not found").
@@ -149,7 +149,7 @@ async function readJson(res: Response, label: string): Promise<unknown> {
   try {
     return JSON.parse(text)
   } catch (e) {
-    throw new Error(`${label}: JSON parse failed — first 200 chars: ${text.slice(0, 200)}`)
+    throw new Error(`${label}: JSON parse failed, first 200 chars: ${text.slice(0, 200)}`)
   }
 }
 

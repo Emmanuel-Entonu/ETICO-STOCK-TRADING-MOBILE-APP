@@ -24,7 +24,7 @@ function ZigZag() {
 }
 
 function fmtDate(iso?: string) {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   const date = d.toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' })

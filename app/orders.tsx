@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { useAuthStore } from '@/store/authStore'
-import { Text, Row, Icon, toast, Loader } from '@/ui'
+import { Text, Row, Icon, toast, Loader, SkeletonList } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { OrderRow } from '@/components/OrderRow'
 import type { PacOrderListItem } from '@/lib/pacApi'
@@ -51,7 +51,7 @@ export default function OrdersHistoryScreen() {
       </Row>
 
       {loadingOrders && pacOrders.length === 0 ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Loader size={56} /></View>
+        <SkeletonList rows={8} />
       ) : (
         <FlatList
           data={pacOrders}

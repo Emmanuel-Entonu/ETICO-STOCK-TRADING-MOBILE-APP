@@ -127,7 +127,7 @@ export default function MarketScreen() {
           <View>
             {/* Header — back button pinned left, title centered, editorial
                 market-status line beneath. No breadth strip, no top-movers
-                carousel — clean and scannable. */}
+                carousel: clean and scannable. */}
             <View style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44 }}>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.iconButton}>

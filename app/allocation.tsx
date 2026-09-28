@@ -272,7 +272,7 @@ const makeStyles = () => StyleSheet.create({
   },
   netWorth: {
     fontSize: 32,
-    lineHeight: 40,          // explicit line height — iOS clipped/overlapped large text without it
+    lineHeight: 40,          // explicit line height, iOS clipped/overlapped large text without it
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -0.8,
@@ -285,7 +285,7 @@ const makeStyles = () => StyleSheet.create({
   },
   centerVal: {
     fontSize: 18,
-    lineHeight: 24,          // explicit — iOS shrink-to-fit needs it
+    lineHeight: 24,          // explicit, iOS shrink-to-fit needs it
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -0.5,

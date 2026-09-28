@@ -20,7 +20,7 @@ function resolve(name: string, fallback: string): string {
   if (!__DEV__) {
     // Warn loudly in release so a missing env doesn't silently point at a
     // stale preview backend — but don't hard-throw and brick the app.
-    console.warn(`[config] ${name} not set — falling back to compiled default. Set it in eas.json / EAS env before shipping.`)
+    console.warn(`[config] ${name} not set: falling back to compiled default. Set it in eas.json / EAS env before shipping.`)
   }
   return fallback
 }

@@ -59,7 +59,7 @@ export default function FundWalletScreen() {
       setPhase('success')
       returnTimer.current = setTimeout(() => {
         returnTimer.current = null
-        toast.success('On its way', 'Your wallet balance will update shortly — no need to refresh.')
+        toast.success('On its way', 'Your wallet balance will update shortly. No need to refresh.')
         router.back()
       }, 1200)
     } catch (e) {
@@ -101,7 +101,7 @@ export default function FundWalletScreen() {
         ) : (
           <View style={{ flex: 1, paddingHorizontal: spacing.xl }}>
             <Text variant="small" tone="muted" style={{ marginTop: spacing.xs }}>
-              Move money from your wallet into your trading account — your buying power on the exchange.
+              Move money from your wallet into your trading account, which is your buying power on the exchange.
             </Text>
 
             <Row align="center" justify="space-between" style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>

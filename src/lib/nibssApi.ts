@@ -57,7 +57,7 @@ export async function initiateBvn(bvn: string): Promise<BvnInitResult> {
     d?.customer_reference ?? d?.customerReference ?? d?.reference ?? d?.ref ??
     nested?.customer_reference ?? nested?.customerReference ?? ''
   )
-  if (!reference) throw new Error('BVN query returned no reference — try again')
+  if (!reference) throw new Error('We couldn’t start BVN verification. Please try again.')
   return {
     otpRequired: true,
     reference,

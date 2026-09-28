@@ -97,7 +97,7 @@ export default function LoginScreen() {
               }}>
                 <Icon name="solar:verified-check-bold" size={20} color={colors.positive} />
                 <Text variant="small" style={{ flex: 1, color: colors.text }}>
-                  Email confirmed — sign in to continue.
+                  Email confirmed. Sign in to continue.
                 </Text>
               </Row>
             ) : null}
