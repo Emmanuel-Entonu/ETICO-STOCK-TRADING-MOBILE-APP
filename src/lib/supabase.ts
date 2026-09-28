@@ -1,4 +1,5 @@
 import 'react-native-url-polyfill/auto'
+import { AppState } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient } from '@supabase/supabase-js'
@@ -54,4 +55,19 @@ export const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey,
     persistSession: true,
     detectSessionInUrl: false,
   },
+})
+
+// Keep the login alive across long breaks away from the app (Supabase's React
+// Native guidance). Without this the token-refresh timer kept firing while the
+// app sat in the background with the network half-asleep: the server could
+// rotate the refresh token but the reply never arrived, so the app kept the
+// old (now used) one, the next refresh was rejected as "already used" and the
+// session ended — users had to sign in again after being away a while.
+// Refresh only while the app is in the foreground; on return it refreshes once,
+// cleanly, with the token it actually holds.
+if (AppState.currentState === 'active') supabase.auth.startAutoRefresh()
+else supabase.auth.stopAutoRefresh()
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') supabase.auth.startAutoRefresh()
+  else supabase.auth.stopAutoRefresh()
 })

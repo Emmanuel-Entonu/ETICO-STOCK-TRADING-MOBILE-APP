@@ -1,43 +1,18 @@
-import { create } from 'zustand'
-
-// Reliability layer for the Home "Beams" card (three.js on expo-gl).
+// Crash guard for the Home "Beams" card (three.js on expo-gl).
 //
-// Causes of the 2026-09-28 crashes are fixed at the source (tabs stay attached
-// so the GL surface is never torn down mid-navigation; three's shader-log read
-// is off; expo-gl patched to wait for its context — patches/expo-gl+*.patch).
+// The two crashes seen on 2026-09-28 are fixed at the source:
+//   • "Cannot read property 'trim' of undefined" — Beams turns off three's
+//     shader-log read (renderer.debug.checkShaderErrors = false).
+//   • "Cannot set property '__expoSetLogging' of undefined" — expo-gl is patched
+//     to wait for its GL context (patches/expo-gl+57.0.2.patch).
 //
-// This is the last line of defence: GL-lifecycle errors are thrown from native
-// GL events / the render loop, outside React rendering, so an ErrorBoundary
-// can't catch them and the global handler made them fatal. Here they're
-// contained and Beams REBUILDS its canvas (self-heal with backoff) — the app
-// never crashes and the card comes back on its own. Every other error goes to
-// the original handler unchanged.
+// This is only a backstop: such errors fire from native GL events / the render
+// loop, outside React, where the global handler would make them FATAL. Here a
+// GL-lifecycle error is logged and ignored — the app keeps running and Beams
+// keeps its canvas (three simply draws the next frame). Nothing is torn down or
+// rebuilt. Every other error goes to the original handler unchanged.
 
-interface GlHealth {
-  /** Bumped on each contained GL error → Beams remounts its canvas. */
-  generation: number
-  errorsInWindow: number
-  report: () => void
-}
-
-let windowStart = 0
-
-export const useGlHealth = create<GlHealth>((set, get) => ({
-  generation: 0,
-  errorsInWindow: 0,
-  report: () => {
-    const now = Date.now()
-    if (now - windowStart > 60_000) { windowStart = now; set({ errorsInWindow: 0 }) }
-    set({ errorsInWindow: get().errorsInWindow + 1 })
-  },
-}))
-
-/** Delay before rebuilding: 0.4s, 1s, 3s, then 8s — never gives up. */
-export function rebuildDelay(errorsInWindow: number): number {
-  return [400, 1000, 3000][errorsInWindow - 1] ?? 8000
-}
-
-const GL_ERROR = /__expoSetLogging|getProgramInfoLog|getShaderInfoLog|configureLogging|_onSurfaceCreate|onFirstUse|EXGL|exglCtx|WebGL(Rendering)?Context/i
+const GL_ERROR = /__expoSetLogging|getProgramInfoLog|getShaderInfoLog|configureLogging|_onSurfaceCreate|onFirstUse|EXGL|exglCtx/i
 
 type Handler = (error: unknown, isFatal?: boolean) => void
 declare const ErrorUtils: { getGlobalHandler: () => Handler; setGlobalHandler: (h: Handler) => void } | undefined
@@ -51,8 +26,7 @@ export function installGlGuard() {
     const e = error as { message?: string; stack?: string } | undefined
     const text = `${e?.message ?? String(error)}\n${e?.stack ?? ''}`
     if (GL_ERROR.test(text)) {
-      console.warn('[glGuard] GL error contained, rebuilding Beams canvas:', e?.message)
-      useGlHealth.getState().report()
+      console.warn('[glGuard] GL error contained (app kept running):', e?.message)
       return
     }
     prev(error, isFatal)
