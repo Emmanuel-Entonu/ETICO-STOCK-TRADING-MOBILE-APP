@@ -9,7 +9,10 @@
     "icon": "./assets/brand/etico-icon.png",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "ng.moneta.capital"
+      "bundleIdentifier": "ng.moneta.capital",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "ng.moneta.capital",
