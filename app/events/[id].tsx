@@ -23,8 +23,8 @@ export default function EventScreen() {
   const { events, subs, loaded, loading, load } = useEventsStore(useShallow((s) => ({
     events: s.events, subs: s.subs, loaded: s.loaded, loading: s.loading, load: s.load,
   })))
-  const { cacsStatus, vaAvailable, loadProfile } = useAuthStore(useShallow((s) => ({
-    cacsStatus: s.cacsStatus, vaAvailable: s.vaAvailable, loadProfile: s.loadProfile,
+  const { cacsStatus, vaAvailable, vaNumber, loadProfile } = useAuthStore(useShallow((s) => ({
+    cacsStatus: s.cacsStatus, vaAvailable: s.vaAvailable, vaNumber: s.vaNumber, loadProfile: s.loadProfile,
   })))
   useEffect(() => { load(); loadProfile() }, [load, loadProfile])
 
@@ -63,6 +63,7 @@ export default function EventScreen() {
   const open = isOpen(event)
   const approved = cacsStatus === 'approved'
   const ready = !!event.collection_va_number
+  const isCollector = !!vaNumber && vaNumber === event.collection_va_number
   const short = total > wallet
 
   const step = (d: number) => {
@@ -119,6 +120,8 @@ export default function EventScreen() {
             title="Finish verification to join"
             body="Only verified accounts can subscribe. Complete your KYC; once your account is approved you can subscribe here."
           />
+        ) : isCollector ? (
+          <Notice tone="info" title="This account collects the payments" body="Subscribers’ payments for this offer are sent to your wallet account, so it can’t subscribe to it." />
         ) : !ready ? (
           <Notice tone="info" title="Payments open shortly" body="This offer will start accepting subscriptions very soon." />
         ) : (
