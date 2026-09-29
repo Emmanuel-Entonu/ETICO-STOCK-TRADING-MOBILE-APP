@@ -12,7 +12,8 @@ import { EVENT_ASSETS, BANNER_ASPECT } from '@/lib/eventAssets'
 export function EventLogo({ event, size = 36 }: { event: AppEvent; size?: number }) {
   const local = EVENT_ASSETS[event.id]?.logo
   if (local) {
-    return <Image source={local} style={{ width: size, height: size, borderRadius: size / 4 }} />
+    // Square, sharp corners: the artwork has its own frame.
+    return <Image source={local} style={{ width: size, height: size }} />
   }
   if (event.logo_url) {
     return <Image source={{ uri: event.logo_url }} style={{ width: size, height: size, borderRadius: size / 4 }} />
