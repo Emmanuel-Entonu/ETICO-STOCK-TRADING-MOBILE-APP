@@ -11,6 +11,7 @@ import { isOpen, totalFor, unitPrice, unitsHeld, subscriptionStatus } from '@/li
 import { useEventsStore } from '@/store/eventsStore'
 import { useAuthStore } from '@/store/authStore'
 import { EventLogo, EventHero } from '@/components/EventBanner'
+import { supabase } from '@/lib/supabase'
 import { TransactionPinModal } from '@/components/TransactionPinModal'
 
 // One event (e.g. the Dangote IPO). The user only picks how many shares:
@@ -23,9 +24,26 @@ export default function EventScreen() {
   const { events, subs, loaded, loading, load } = useEventsStore(useShallow((s) => ({
     events: s.events, subs: s.subs, loaded: s.loaded, loading: s.loading, load: s.load,
   })))
-  const { cacsStatus, vaAvailable, vaNumber, loadProfile } = useAuthStore(useShallow((s) => ({
-    cacsStatus: s.cacsStatus, vaAvailable: s.vaAvailable, vaNumber: s.vaNumber, loadProfile: s.loadProfile,
+  const { kycStatus, cacsStatus, vaAvailable, vaNumber, loadProfile, userId } = useAuthStore(useShallow((s) => ({
+    kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, vaAvailable: s.vaAvailable, vaNumber: s.vaNumber,
+    loadProfile: s.loadProfile, userId: s.user?.id ?? null,
   })))
+
+  // Quietly check the account has every detail PAC needs (nothing is shown;
+  // the server enforces the same rule and carries the details over itself).
+  const [missing, setMissing] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!userId) return
+    supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+      .then(({ data }) => {
+        const p = (data ?? {}) as Record<string, unknown>
+        const need: Array<[string, string]> = [
+          ['cscs_number', 'CSCS number'], ['chn', 'CHN'], ['bvn', 'BVN'],
+          ['full_name', 'full name'], ['email', 'email'], ['phone', 'phone number'],
+        ]
+        setMissing(need.filter(([k]) => !String(p[k] ?? '').trim()).map(([, label]) => label))
+      }, () => setMissing([]))
+  }, [userId])
   useEffect(() => { load(); loadProfile() }, [load, loadProfile])
 
   const event = events.find((e) => e.id === id)
@@ -72,7 +90,8 @@ export default function EventScreen() {
   const total = totalFor(event, units)
   const wallet = vaAvailable ?? 0
   const open = isOpen(event)
-  const approved = cacsStatus === 'approved'
+  // Fully verified: KYC verified AND CSCS issued (approved).
+  const approved = kycStatus === 'verified' && cacsStatus === 'approved'
   const ready = !!event.collection_va_number
   const isCollector = !!vaNumber && vaNumber === event.collection_va_number
   const short = total > wallet
@@ -131,7 +150,13 @@ export default function EventScreen() {
           <Notice
             tone="warning"
             title="Finish verification to join"
-            body="Only verified accounts can subscribe. Complete your KYC; once your account is approved you can subscribe here."
+            body="Only fully verified accounts can subscribe: your KYC must be verified and your CSCS account issued."
+          />
+        ) : missing && missing.length > 0 ? (
+          <Notice
+            tone="error"
+            title="Your account details are incomplete"
+            body={`Your account is missing: ${missing.join(', ')}. Contact support to complete your details, then you can subscribe.`}
           />
         ) : isCollector ? (
           <Notice tone="info" title="This account collects the payments" body="Subscribers’ payments for this offer are sent to your wallet account, so it can’t subscribe to it." />
