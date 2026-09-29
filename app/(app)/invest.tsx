@@ -12,7 +12,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { RiskDial } from '@/components/RiskDial'
 import { RecommendedRail } from '@/components/RecommendedRail'
 import { AssetSearch } from '@/components/AssetSearch'
-import { EventsEntry } from '@/components/EventsEntry'
+import { useEventsStore } from '@/store/eventsStore'
+import { isOpen } from '@/lib/eventsApi'
 
 // Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
@@ -20,6 +21,7 @@ const CARD_IMAGES = {
   stocks:  require('../../assets/asset-icons/card-ethical-stocks.png') as ImageSourcePropType,
   bonds:   require('../../assets/asset-icons/card-bonds.png')          as ImageSourcePropType,
   savings: require('../../assets/asset-icons/card-savings.png')        as ImageSourcePropType,
+  events:  require('../../assets/asset-icons/card-events.jpg')         as ImageSourcePropType,
 } as const
 
 interface Product {
@@ -63,6 +65,23 @@ export default function AssetsScreen() {
 
   const ethicalCount = useMemo(() => marketData.filter(s => isEthical(s.symbol)).length, [marketData])
   const stockCount = ethicalCount || ETHICAL_TICKERS.size
+
+  // Events section card (IPOs and public offers). Its own page lists every event.
+  const allEvents = useEventsStore((s) => s.events)
+  const loadEvents = useEventsStore((s) => s.load)
+  useEffect(() => { loadEvents() }, [loadEvents])
+  const openEvents = allEvents.filter((e) => isOpen(e))
+  const eventsCard: Product = {
+    key: 'events',
+    title: 'Events',
+    subtitle: openEvents.length === 1
+      ? `IPOs & public offers · ${openEvents[0].title.replace(/ IPO$/, '')} IPO open`
+      : openEvents.length > 1 ? `IPOs & public offers · ${openEvents.length} open now` : 'IPOs & public offers',
+    icon: 'solar:ticket-bold',
+    dark: true,
+    badge: openEvents.length ? 'Live' : undefined,
+    route: '/events',
+  }
 
   const products: Product[] = [
     {
@@ -144,9 +163,19 @@ export default function AssetsScreen() {
         ) : (
         <>
 
-        {/* Events: IPOs and special offers (e.g. the Dangote IPO) */}
-        <View style={styles.eventsWrap}>
-          <EventsEntry />
+        {/* Events: its own section card, like the product cards below. */}
+        <View style={styles.eyebrowWrap}>
+          <Text variant="eyebrow" tone="muted">EVENTS</Text>
+        </View>
+        <View style={[styles.stack, styles.eventsWrap]}>
+          <MotiView
+            key={`events-${focusKey}`}
+            from={{ opacity: 0, translateY: 18, scale: 0.96 }}
+            animate={{ opacity: 1, translateY: 0, scale: 1 }}
+            transition={{ type: 'spring', damping: 18, stiffness: 220, mass: 0.8, delay: 30 }}
+          >
+            <ProductCard product={eventsCard} onPress={() => router.push('/events' as never)} />
+          </MotiView>
         </View>
 
         <View style={styles.eyebrowWrap}>
