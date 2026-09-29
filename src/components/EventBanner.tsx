@@ -6,9 +6,14 @@ import { Text, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { useEventsStore } from '@/store/eventsStore'
 import { isOpen, unitsHeld, type AppEvent } from '@/lib/eventsApi'
+import { EVENT_ASSETS, BANNER_ASPECT } from '@/lib/eventAssets'
 
 /** Event logo: the event's image, or a branded tile with its initials. */
 export function EventLogo({ event, size = 36 }: { event: AppEvent; size?: number }) {
+  const local = EVENT_ASSETS[event.id]?.logo
+  if (local) {
+    return <Image source={local} style={{ width: size, height: size, borderRadius: size / 4 }} />
+  }
   if (event.logo_url) {
     return <Image source={{ uri: event.logo_url }} style={{ width: size, height: size, borderRadius: size / 4 }} />
   }
@@ -17,6 +22,20 @@ export function EventLogo({ event, size = 36 }: { event: AppEvent; size?: number
     <View style={{ width: size, height: size, borderRadius: size / 4, backgroundColor: '#1B2447', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: size * 0.3, lineHeight: size * 0.38 }}>{initials}</Text>
     </View>
+  )
+}
+
+/** Wide event artwork (2:1), full width with rounded corners. Nothing if none. */
+export function EventHero({ event, radius = radii.lg }: { event: AppEvent; radius?: number }) {
+  const banner = EVENT_ASSETS[event.id]?.banner
+  if (!banner) return null
+  return (
+    <Image
+      source={banner}
+      resizeMode="cover"
+      accessibilityLabel={`${event.title} banner`}
+      style={{ width: '100%', aspectRatio: BANNER_ASPECT, borderRadius: radius, backgroundColor: colors.bgSubtle }}
+    />
   )
 }
 

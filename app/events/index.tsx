@@ -8,7 +8,7 @@ import { colors, spacing, radii } from '@/theme'
 import { naira } from '@/lib/format'
 import { isOpen, unitPrice, unitsHeld } from '@/lib/eventsApi'
 import { useEventsStore } from '@/store/eventsStore'
-import { EventLogo } from '@/components/EventBanner'
+import { EventLogo, EventHero } from '@/components/EventBanner'
 
 // Events: IPOs and other offers ETICO runs. Reusable for future events.
 export default function EventsScreen() {
@@ -54,6 +54,9 @@ export default function EventsScreen() {
                   borderColor: colors.border, backgroundColor: pressed ? colors.bgSubtle : colors.surface,
                 })}
               >
+                <View style={{ marginBottom: spacing.md }}>
+                  <EventHero event={e} radius={radii.md} />
+                </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                   <EventLogo event={e} size={44} />
                   <View style={{ flex: 1, minWidth: 0 }}>
