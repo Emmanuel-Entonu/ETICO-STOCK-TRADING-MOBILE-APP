@@ -16,7 +16,7 @@ import { useShallow } from 'zustand/react/shallow'
 export default function AccountScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, signOut, kycStatus, cacsStatus, pacAccountId, cscsNumber } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId, cscsNumber: s.cscsNumber })))
+  const { user, signOut, kycStatus, cacsStatus, pacAccountId, cscsNumber, chn } = useAuthStore(useShallow((s) => ({ user: s.user, signOut: s.signOut, kycStatus: s.kycStatus, cacsStatus: s.cacsStatus, pacAccountId: s.pacAccountId, cscsNumber: s.cscsNumber, chn: s.chn })))
   const [confirmOut, setConfirmOut] = useState(false)
 
   const email = user?.email ?? '-'
@@ -137,6 +137,9 @@ export default function AccountScreen() {
             <ListRow icon="solar:document-text-linear" label="NGX / CSCS" status={cscsLine} />
             {approved && cscsNumber ? (
               <ListRow icon="solar:hashtag-linear" label="CSCS number" value={cscsNumber} />
+            ) : null}
+            {approved && chn ? (
+              <ListRow icon="solar:hashtag-linear" label="CHN" value={chn} />
             ) : null}
             <ListRow icon="solar:card-2-linear" label="Brokerage account" status={brokerageLine} last />
           </Group>

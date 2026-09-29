@@ -28,6 +28,7 @@ interface AuthState {
   cacsDocUrl: string | null
   cacsRejectionReason: string | null
   cscsNumber: string | null    // CSCS number entered by PAC on approval
+  chn: string | null           // Clearing House Number entered by PAC on approval
   walletBalance: number       // live PAC trading-wallet balance (buying power)
   vaAvailable: number         // Virtual Account balance available to fund the wallet
   hasPin: boolean
@@ -73,6 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   cacsDocUrl: null,
   cacsRejectionReason: null,
   cscsNumber: null,
+  chn: null,
   walletBalance: 0,
   vaAvailable: 0,
   hasPin: false,
@@ -181,10 +183,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useWatchlistStore } = require('@/store/watchlistStore') as typeof import('@/store/watchlistStore')
     useWatchlistStore.getState().reset()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useEventsStore } = require('@/store/eventsStore') as typeof import('@/store/eventsStore')
+    useEventsStore.getState().reset()
     set({
       user: null, session: null, pacAccountId: null,
       kycStatus: 'pending', cacsStatus: 'not_submitted',
-      cacsDocUrl: null, cacsRejectionReason: null, cscsNumber: null,
+      cacsDocUrl: null, cacsRejectionReason: null, cscsNumber: null, chn: null,
       walletBalance: 0, vaAvailable: 0, profileReady: false, hasPin: false,
       vaReference: null, vaNumber: null, vaBank: null, vaAccountName: null,
     })
@@ -234,6 +239,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // wallet_balance above is only an instant-paint fallback. The wallet is a
       // mirror of the live PAC cash balance, so pull the real value now.
       if (profile.pac_account_id) get().refreshWalletBalance().catch(() => {})
+      // CHN in its own tolerant query: if partner-chn-number.sql hasn't run yet
+      // the column is missing, and that must never break the main profile load.
+      supabase.from('profiles').select('chn').eq('id', user.id).maybeSingle()
+        .then(({ data }) => { if (data) set({ chn: (data as { chn?: string | null }).chn ?? null }) }, () => {})
       // Keep KYC push reminders in step with the account state.
       syncKycReminders(user.id, profile.kyc_status, profile.cacs_status)
     } else if (!fetchError || fetchError.code === 'PGRST116') {

@@ -22,6 +22,7 @@ interface Offering {
 }
 
 const OFFERINGS: Offering[] = [
+  { key: 'events', title: 'Events: IPOs and offers', subtitle: 'Dangote Refinery IPO and other public offers', icon: 'solar:ticket-bold', keywords: 'events ipo offer offers dangote refinery primary public subscription', route: '/events' },
   { key: 'stocks', title: 'Ethical Stocks', subtitle: 'Shariah- and ESG-screened NGX equities', icon: 'solar:leaf-bold', keywords: 'ethical stocks shares equities ngx halal shariah esg', route: '/(app)/market?filter=ethical' },
   { key: 'all', title: 'All NGX stocks', subtitle: 'The full screened market', icon: 'solar:chart-2-bold', keywords: 'all market ngx stocks shares equities exchange', route: '/(app)/market' },
   { key: 'bonds', title: 'Ethical Bonds', subtitle: 'Fixed-income instruments', icon: 'solar:document-text-bold', keywords: 'bonds sukuk fixed income treasury' },

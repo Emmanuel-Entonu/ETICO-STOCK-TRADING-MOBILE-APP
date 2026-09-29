@@ -19,6 +19,7 @@ import { TAB_BAR_CLEARANCE } from '@/components/FloatingTabBar'
 import { OrderRow } from '@/components/OrderRow'
 import { RecommendedRail } from '@/components/RecommendedRail'
 import { KycStatusCard } from '@/components/KycStatusCard'
+import { EventBanner } from '@/components/EventBanner'
 import { useNotificationStore } from '@/store/notificationStore'
 
 type Tab = 'holdings' | 'orders'
@@ -133,6 +134,8 @@ export default function HomeScreen() {
 
         {/* SECTION 1 — Wealth hero. Single job: total + delta. */}
         <View style={{ paddingHorizontal: spacing.xl }}>
+          {/* Ongoing events (e.g. the Dangote IPO): slim, above the wealth card. */}
+          <EventBanner />
           <MotiView
             from={{ opacity: 0, scale: 0.94, translateY: 8 }}
             animate={{ opacity: 1, scale: 1, translateY: 0 }}

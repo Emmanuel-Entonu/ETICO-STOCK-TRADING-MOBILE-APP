@@ -12,6 +12,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { RiskDial } from '@/components/RiskDial'
 import { RecommendedRail } from '@/components/RecommendedRail'
 import { AssetSearch } from '@/components/AssetSearch'
+import { EventsEntry } from '@/components/EventsEntry'
 
 // Full-bleed background artwork for each product card. `require` at module scope
 // so Metro can hash and embed them at build time.
@@ -142,6 +143,11 @@ export default function AssetsScreen() {
           />
         ) : (
         <>
+
+        {/* Events: IPOs and special offers (e.g. the Dangote IPO) */}
+        <View style={styles.eventsWrap}>
+          <EventsEntry />
+        </View>
 
         <View style={styles.eyebrowWrap}>
           <Text variant="eyebrow" tone="muted">ETHICAL INVESTING</Text>
@@ -293,6 +299,11 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgSubtle,
+  },
+  eventsWrap: {
+    width: CONTENT_W,
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
   },
   eyebrowWrap: {
     width: CONTENT_W,

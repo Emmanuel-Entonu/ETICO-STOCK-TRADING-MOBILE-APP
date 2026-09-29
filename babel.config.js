@@ -124,6 +124,9 @@ module.exports = function (api) {
             'solar:close-circle-bold',
             'solar:clock-circle-bold',
             'solar:verified-check-bold',
+            'solar:add-circle-linear',     // IPO shares stepper
+            'solar:minus-circle-linear',   // IPO shares stepper
+            'solar:ticket-bold',           // Events
             'solar:info-circle-bold',
             'solar:logout-3-linear',
             'solar:logout-3-bold',

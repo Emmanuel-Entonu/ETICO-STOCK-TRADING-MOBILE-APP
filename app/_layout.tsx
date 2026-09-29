@@ -308,6 +308,9 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="contact" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="order-status/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="events/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="events/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="events/processing" options={{ animation: 'fade', gestureEnabled: false }} />
           <Stack.Screen name="allocation" options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: 320 }} />
         </Stack>
       </AppErrorBoundary>
