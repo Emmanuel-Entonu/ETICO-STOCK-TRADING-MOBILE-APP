@@ -7,7 +7,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Text, Icon, Button, Notice, Skeleton } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { naira } from '@/lib/format'
-import { isOpen, totalFor, unitPrice, unitsHeld } from '@/lib/eventsApi'
+import { isOpen, totalFor, unitPrice, unitsHeld, subscriptionStatus } from '@/lib/eventsApi'
 import { useEventsStore } from '@/store/eventsStore'
 import { useAuthStore } from '@/store/authStore'
 import { EventLogo } from '@/components/EventBanner'
@@ -38,6 +38,17 @@ export default function EventScreen() {
   const [units, setUnits] = useState(1)
   useEffect(() => { setUnits((u) => Math.min(Math.max(1, u), Math.max(1, remaining))) }, [remaining])
   const [pinOpen, setPinOpen] = useState(false)
+
+  // Self-heal: any of my payments still 'processing' (e.g. the app closed
+  // mid-payment) gets resolved by the server now, then the page refreshes.
+  const pendingIds = mine.filter((s) => s.status === 'processing').map((s) => s.id).join(',')
+  useEffect(() => {
+    if (!pendingIds) return
+    let alive = true
+    Promise.allSettled(pendingIds.split(',').map((sid) => subscriptionStatus(sid)))
+      .then(() => { if (alive) { load(); loadProfile() } })
+    return () => { alive = false }
+  }, [pendingIds, load, loadProfile])
 
   if (!loaded) {
     return (

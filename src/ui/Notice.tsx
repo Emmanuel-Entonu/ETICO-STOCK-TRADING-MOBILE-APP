@@ -51,8 +51,9 @@ export function Notice({
         {body ? <Text variant="small" tone="muted" style={{ marginTop: 3, lineHeight: 19 }}>{body}</Text> : null}
         {children ? <View style={{ marginTop: spacing.md }}>{children}</View> : null}
         {action ? (
-          <View style={{ marginTop: spacing.lg }}>
-            <Button title={action.label} onPress={action.onPress} />
+          // Compact, right-aligned: a card's action shouldn't dominate the screen.
+          <View style={{ marginTop: spacing.md, alignItems: 'flex-end' }}>
+            <Button title={action.label} onPress={action.onPress} size="sm" fullWidth={false} style={{ alignSelf: 'flex-end' }} />
           </View>
         ) : null}
       </View>

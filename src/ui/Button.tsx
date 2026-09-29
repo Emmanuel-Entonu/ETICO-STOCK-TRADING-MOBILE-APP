@@ -3,7 +3,7 @@ import { Loader } from './Loader'
 import { colors, radii, spacing } from '@/theme'
 import { Text } from './Text'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'green'
 type Size = 'lg' | 'md' | 'sm'
 
 interface Props {
@@ -69,6 +69,10 @@ function variantStyle(v: Variant, pressed: boolean, disabled: boolean): ViewStyl
     // it used to be identical to primary.
     case 'danger':
       return { backgroundColor: colors.negative, borderColor: 'transparent', opacity: pressed ? 0.85 : 1 }
+    // The scheme's green (#3FBF6B in dark, deep green in light), used for the
+    // Home "Load wallet" / "Invest now" actions (MD, 2026-09-30).
+    case 'green':
+      return { backgroundColor: colors.positive, borderColor: 'transparent', opacity: pressed ? 0.85 : 1 }
     case 'secondary':
       return { backgroundColor: pressed ? colors.bgMuted : colors.bg, borderColor: colors.borderStrong }
     case 'ghost':
@@ -79,6 +83,8 @@ function variantStyle(v: Variant, pressed: boolean, disabled: boolean): ViewStyl
 function textColor(v: Variant, disabled: boolean): string {
   if (disabled) return colors.textSubtle
   if (v === 'danger') return '#FFFFFF'
+  // Page background reads on the green in both themes (dark ink / cream).
+  if (v === 'green') return colors.bg
   if (v === 'primary') return colors.textOnBrand
   if (v === 'ghost') return colors.brand
   return colors.text

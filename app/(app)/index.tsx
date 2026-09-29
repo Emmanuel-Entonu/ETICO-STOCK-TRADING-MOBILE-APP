@@ -245,9 +245,9 @@ export default function HomeScreen() {
             cash) → load the wallet; otherwise → go invest. */}
         <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
           {(vaAvailable ?? 0) + (walletBalance ?? 0) < 500 ? (
-            <Button title="Load wallet" onPress={() => router.push('/wallet' as never)} />
+            <Button title="Load wallet" variant="green" onPress={() => router.push('/wallet' as never)} />
           ) : (
-            <Button title="Invest" onPress={() => router.push('/(app)/invest' as never)} />
+            <Button title="Invest now" variant="green" onPress={() => router.push('/(app)/invest' as never)} />
           )}
         </View>
 

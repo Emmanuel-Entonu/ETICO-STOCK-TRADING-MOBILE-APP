@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics'
 import { Text, Icon, Button, Loader } from '@/ui'
 import { colors, spacing } from '@/theme'
 import { naira } from '@/lib/format'
-import { subscribe, subscriptionStatus } from '@/lib/eventsApi'
+import { subscribe, subscriptionStatus, type SubscribeResult } from '@/lib/eventsApi'
 import { useEventsStore } from '@/store/eventsStore'
 import { useAuthStore } from '@/store/authStore'
 
@@ -15,7 +15,9 @@ import { useAuthStore } from '@/store/authStore'
 // (guarded so a re-render / remount can't send it twice), then shows the result.
 // If the provider's answer is unknown it polls until the server resolves it.
 
-const sentNonces = new Set<string>()
+// One payment request per nonce. A re-mount reuses the same promise, so the
+// request is never sent twice AND the result still reaches the screen.
+const inflight = new Map<string, Promise<SubscribeResult>>()
 type Phase = 'processing' | 'paid' | 'failed'
 
 export default function EventProcessingScreen() {
@@ -36,8 +38,7 @@ export default function EventProcessingScreen() {
   }
 
   useEffect(() => {
-    if (!event || !units || !nonce || sentNonces.has(nonce)) return
-    sentNonces.add(nonce)
+    if (!event || !units || !nonce) return
     let alive = true
     const poll = (id: string, tries: number) => {
       pollRef.current = setTimeout(async () => {
@@ -50,7 +51,12 @@ export default function EventProcessingScreen() {
         else if (alive) { setMessage('This is taking longer than usual. We’ll notify you as soon as it’s confirmed.') }
       }, 5000)
     }
-    subscribe(event, Number(units))
+    let request = inflight.get(nonce)
+    if (!request) {
+      request = subscribe(event, Number(units))
+      inflight.set(nonce, request)
+    }
+    request
       .then((r) => {
         if (!alive) return
         setAmount(r.amount)
