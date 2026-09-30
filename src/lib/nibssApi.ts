@@ -101,8 +101,7 @@ export async function confirmBvnOtp(reference: string, otp: string): Promise<Bvn
     // Only a real street/city address, never the state of origin. Empty here
     // means the KYC screen leaves the address blank for the user to fill in.
     address:       [street, city].filter(Boolean).join(', '),
-    // Moneta now returns the NIN as `customer_id` (it used to be `nin`).
-    nin:           [d.nin, d.NIN, d.nin_number, d.national_identity_number, d.customer_id].map(str).find((v) => /^\d{11}$/.test(v)) ?? '',
+    nin:           str(d.nin),
     maritalStatus: str(d.marital_status ?? d.maritalStatus),
     nationality:   str(d.nationality),
     stateOfOrigin: state,
