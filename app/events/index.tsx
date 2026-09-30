@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useShallow } from 'zustand/react/shallow'
 import { Text, Icon, Skeleton } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
-import { isOpen, unitsHeld, type AppEvent } from '@/lib/eventsApi'
+import { isOpen, unitsHeld, capReached, type AppEvent } from '@/lib/eventsApi'
 import { EVENT_ASSETS, BANNER_ASPECT } from '@/lib/eventAssets'
 import { useEventsStore } from '@/store/eventsStore'
 import { EventLogo } from '@/components/EventBanner'
@@ -58,7 +58,7 @@ export default function EventsScreen() {
             <EventCard
               key={e.id}
               event={e}
-              subscribed={unitsHeld(subs.filter((s) => s.event_id === e.id)) >= e.max_units_per_user}
+              subscribed={capReached(e, unitsHeld(subs.filter((s) => s.event_id === e.id)))}
               onPress={() => router.push(`/events/${e.id}` as never)}
             />
           ))}

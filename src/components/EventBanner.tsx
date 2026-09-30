@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Text, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { useEventsStore } from '@/store/eventsStore'
-import { isOpen, unitsHeld, type AppEvent } from '@/lib/eventsApi'
+import { isOpen, unitsHeld, capReached, type AppEvent } from '@/lib/eventsApi'
 import { EVENT_ASSETS, BANNER_ASPECT } from '@/lib/eventAssets'
 
 /** Event logo: the event's image, or a branded tile with its initials. */
@@ -57,7 +57,7 @@ export function EventBanner() {
     <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
       {ongoing.slice(0, 2).map((e) => {
         const held = unitsHeld(subs.filter((s) => s.event_id === e.id))
-        const done = held >= e.max_units_per_user
+        const done = capReached(e, held)
         const closes = fmtClose(e.closes_at)
         return (
           <Pressable

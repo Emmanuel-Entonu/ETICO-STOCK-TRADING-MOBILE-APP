@@ -7,7 +7,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Text, Icon, Button, Notice, Skeleton } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
 import { naira } from '@/lib/format'
-import { isOpen, totalFor, unitPrice, unitsHeld, subscriptionStatus } from '@/lib/eventsApi'
+import { isOpen, totalFor, unitPrice, unitsHeld, subscriptionStatus, hasCap, lotMin, lotMax, lotStep, capReached } from '@/lib/eventsApi'
 import { useEventsStore } from '@/store/eventsStore'
 import { useAuthStore } from '@/store/authStore'
 import { EventLogo } from '@/components/EventBanner'
@@ -50,11 +50,21 @@ export default function EventScreen() {
   const mine = useMemo(() => subs.filter((s) => s.event_id === id), [subs, id])
   const held = unitsHeld(mine)
   const limit = event?.max_units_per_user ?? 0
-  const remaining = Math.max(0, limit - held)
-  const done = !!event && held >= limit
+  const capped = !!event && hasCap(event)
+  // Lot rules: at least `minLot`, in steps of `lotSize`, up to `maxLot`.
+  const minLot = event ? lotMin(event) : 1
+  const lotSize = event ? lotStep(event) : 1
+  const maxLot = event ? lotMax(event, held) : 0
+  const done = !!event && capReached(event, held)
 
   const [units, setUnits] = useState(1)
-  useEffect(() => { setUnits((u) => Math.min(Math.max(1, u), Math.max(1, remaining))) }, [remaining])
+  useEffect(() => {
+    // Keep the choice valid: a whole number of lots between the min and max.
+    setUnits((u) => {
+      const snapped = Math.round(u / lotSize) * lotSize
+      return Math.max(minLot, Math.min(snapped, Math.max(minLot, maxLot)))
+    })
+  }, [minLot, lotSize, maxLot])
   const [pinOpen, setPinOpen] = useState(false)
 
   // Self-heal: any of my payments still 'processing' (e.g. the app closed
@@ -97,7 +107,7 @@ export default function EventScreen() {
   const short = total > wallet
 
   const step = (d: number) => {
-    const next = Math.min(remaining, Math.max(1, units + d))
+    const next = Math.min(maxLot, Math.max(minLot, units + d * lotSize))
     if (next !== units) { setUnits(next); Haptics.selectionAsync().catch(() => {}) }
   }
 
@@ -134,8 +144,10 @@ export default function EventScreen() {
           <View style={{ marginTop: spacing.md, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.bgSubtle, gap: spacing.sm }}>
             <InfoRow label="Unit price" value={naira(price)} />
             {event.closes_at ? <InfoRow label="Closing date" value={new Date(event.closes_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })} /> : null}
-            <InfoRow label="Your limit" value={`${limit} shares`} />
-            <InfoRow label="You’ve subscribed" value={`${held} of ${limit}`} />
+            <InfoRow label="Minimum" value={`${minLot} shares`} />
+            {lotSize > 1 ? <InfoRow label="Buy in multiples of" value={String(lotSize)} /> : null}
+            {capped ? <InfoRow label="Your limit" value={`${limit} shares`} /> : null}
+            <InfoRow label="You’ve subscribed" value={capped ? `${held} of ${limit}` : `${held} ${held === 1 ? 'share' : 'shares'}`} />
           </View>
         </View>
 
@@ -164,14 +176,18 @@ export default function EventScreen() {
           <View style={{ padding: spacing.lg, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
             <Text variant="eyebrow" tone="muted">HOW MANY SHARES?</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md }}>
-              <Pressable onPress={() => step(-1)} disabled={units <= 1} hitSlop={10} accessibilityLabel="One fewer share" style={{ opacity: units <= 1 ? 0.35 : 1 }}>
+              <Pressable onPress={() => step(-1)} disabled={units <= minLot} hitSlop={10} accessibilityLabel={`${lotSize} fewer`} style={{ opacity: units <= minLot ? 0.35 : 1 }}>
                 <Icon name="solar:minus-circle-linear" size={40} color={colors.brand} />
               </Pressable>
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ fontSize: 40, lineHeight: 46, fontWeight: '800', color: colors.text }}>{units}</Text>
-                <Text variant="small" tone="muted">{units === 1 ? 'share' : 'shares'} · up to {remaining}</Text>
+                <Text variant="small" tone="muted">
+                  {units === 1 ? 'share' : 'shares'}
+                  {lotSize > 1 ? ` · multiples of ${lotSize}` : ''}
+                  {capped ? ` · up to ${maxLot}` : ''}
+                </Text>
               </View>
-              <Pressable onPress={() => step(1)} disabled={units >= remaining} hitSlop={10} accessibilityLabel="One more share" style={{ opacity: units >= remaining ? 0.35 : 1 }}>
+              <Pressable onPress={() => step(1)} disabled={units >= maxLot} hitSlop={10} accessibilityLabel={`${lotSize} more`} style={{ opacity: units >= maxLot ? 0.35 : 1 }}>
                 <Icon name="solar:add-circle-linear" size={40} color={colors.brand} />
               </Pressable>
             </View>

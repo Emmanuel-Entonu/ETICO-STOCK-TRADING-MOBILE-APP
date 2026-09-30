@@ -18,7 +18,11 @@ export interface AppEvent {
   summary: string | null
   logo_url: string | null
   unit_price_kobo: number
+  /** 1,000,000 or more = no cap (see hasCap). */
   max_units_per_user: number
+  /** Smallest purchase, and purchases must be a multiple of unit_step. */
+  min_units?: number
+  unit_step?: number
   opens_at: string | null
   closes_at: string | null
   status: 'upcoming' | 'open' | 'closed'
@@ -53,13 +57,37 @@ export function isOpen(e: AppEvent, now = Date.now()): boolean {
 export const unitsHeld = (subs: EventSubscription[]) =>
   subs.filter((s) => s.status !== 'failed').reduce((n, s) => n + s.units, 0)
 
+// Lot rules. The server enforces the same (event_subscribe RPC).
+export const NO_CAP = 1_000_000
+export const hasCap = (e: AppEvent) => e.max_units_per_user < NO_CAP
+export const lotStep = (e: AppEvent) => Math.max(1, e.unit_step ?? 1)
+/** Smallest valid purchase: at least min_units, rounded up to a multiple of the step. */
+export const lotMin = (e: AppEvent) => {
+  const step = lotStep(e)
+  return Math.ceil(Math.max(1, e.min_units ?? 1) / step) * step
+}
+/** Largest valid purchase left under the cap (NO_CAP when uncapped), in whole steps. */
+export const lotMax = (e: AppEvent, held: number) => {
+  const step = lotStep(e)
+  const room = hasCap(e) ? Math.max(0, e.max_units_per_user - held) : NO_CAP
+  return Math.floor(room / step) * step
+}
+/** True when no valid purchase is left (only possible with a cap). */
+export const capReached = (e: AppEvent, held: number) => hasCap(e) && lotMax(e, held) < lotMin(e)
+
+const EVENT_COLS = 'id, kind, title, issuer, summary, logo_url, unit_price_kobo, max_units_per_user, opens_at, closes_at, status, docs, collection_va_number'
+
 export async function fetchEvents(): Promise<AppEvent[]> {
-  const { data, error } = await supabase
+  const full = await supabase
     .from('events')
-    .select('id, kind, title, issuer, summary, logo_url, unit_price_kobo, max_units_per_user, opens_at, closes_at, status, docs, collection_va_number')
+    .select(`${EVENT_COLS}, min_units, unit_step`)
     .order('sort', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AppEvent[]
+  if (!full.error) return (full.data ?? []) as AppEvent[]
+  // Lot columns not added yet (SQL not run): load without them (lots of 1).
+  if (!/min_units|unit_step/.test(full.error.message)) throw new Error(full.error.message)
+  const basic = await supabase.from('events').select(EVENT_COLS).order('sort', { ascending: true })
+  if (basic.error) throw new Error(basic.error.message)
+  return (basic.data ?? []) as AppEvent[]
 }
 
 export async function fetchMySubscriptions(eventId?: string): Promise<EventSubscription[]> {
