@@ -21,7 +21,6 @@ export interface BvnProfile {
   gender:        string
   phone:         string
   address:       string
-  nin:           string
   maritalStatus: string
   nationality:   string
   stateOfOrigin: string
@@ -101,7 +100,6 @@ export async function confirmBvnOtp(reference: string, otp: string): Promise<Bvn
     // Only a real street/city address, never the state of origin. Empty here
     // means the KYC screen leaves the address blank for the user to fill in.
     address:       [street, city].filter(Boolean).join(', '),
-    nin:           str(d.nin),
     maritalStatus: str(d.marital_status ?? d.maritalStatus),
     nationality:   str(d.nationality),
     stateOfOrigin: state,

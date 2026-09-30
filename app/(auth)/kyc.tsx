@@ -15,7 +15,7 @@ import { uploadKycSelfie } from '@/lib/kycUpload'
 import { finalizeKyc } from '@/lib/kycFinalize'
 import {
   validateBvn, validateOtp, validateFullName, validateDob,
-  validateAddress, validateNigerianPhone, validateIdNumber,
+  validateAddress, validateNigerianPhone,
 } from '@/lib/validation'
 import { Text, Button, Icon } from '@/ui'
 import { colors, spacing, radii } from '@/theme'
@@ -25,16 +25,9 @@ import { useShallow } from 'zustand/react/shallow'
 
 type Step = 1 | 2 | 3 | 4 | 5
 
-const ID_TYPES = [
-  { value: 'National ID (NIN)',      label: 'National ID (NIN)' },
-  { value: 'International Passport', label: 'International Passport' },
-  { value: "Driver's Licence",       label: "Driver's Licence" },
-  { value: "Voter's Card",           label: "Voter's Card" },
-] as const
-
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   1: { title: 'Let’s verify it’s you', subtitle: 'Confirm your BVN, then a few personal details.' },
-  2: { title: 'ID & settlement account', subtitle: 'Your ID, and the bank account for sale proceeds & withdrawals.' },
+  2: { title: 'Settlement account',     subtitle: 'The bank account for sale proceeds & withdrawals.' },
   3: { title: 'Next of kin',            subtitle: 'A contact and your mother’s maiden name, required by the exchange.' },
   4: { title: 'Confirm your details',   subtitle: 'Check everything is correct before we take your photo.' },
   5: { title: 'Take a selfie',          subtitle: 'A quick photo to confirm it’s really you. Look at the camera.' },
@@ -96,14 +89,9 @@ export default function KycScreen() {
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
   // Full BVN record (kept so we can persist every field + create the VA with
-  // the exact surname / first name / NIN NIBSS returned).
+  // the exact surname / first name NIBSS returned).
   const [bvnProfile, setBvnProfile] = useState<BvnProfile | null>(null)
 
-  // Step 2 — ID
-  // ID is ALWAYS the NIN from the verified BVN record — read-only, never typed
-  // or picked by the user (and never prefilled from an old saved profile).
-  const [idType, setIdType] = useState<typeof ID_TYPES[number]['value']>('National ID (NIN)')
-  const [idNumber, setIdNumber] = useState('')
   // Step 2 — settlement (bank) account. This is the PAC account-opening form's
   // "BANK ACCOUNT DETAILS": where sale proceeds / withdrawals are paid out. It
   // is NOT the Moneta funding wallet. Reviewed by PAC on the partner dashboard.
@@ -159,7 +147,7 @@ export default function KycScreen() {
     if (!user) return
     let cancelled = false
     supabase.from('profiles')
-      .select('full_name, date_of_birth, address, phone, id_type, id_number, settlement_bank_name, settlement_account_number, settlement_account_name, next_of_kin_name, next_of_kin_phone, mother_maiden_name')
+      .select('full_name, date_of_birth, address, phone, settlement_bank_name, settlement_account_number, settlement_account_name, next_of_kin_name, next_of_kin_phone, mother_maiden_name')
       .eq('id', user.id)
       .single()
       .then(({ data: p }) => {
@@ -276,8 +264,6 @@ export default function KycScreen() {
       if (profile.dob)     setDob(profile.dob)
       if (profile.address) setAddress(profile.address)
       if (profile.phone)   setPhone(profile.phone)
-      setIdType('National ID (NIN)')
-      setIdNumber(profile.nin ?? '')
       setBvnDone(true)
     } catch (e) {
       setBvnError((e as Error).message)
@@ -307,9 +293,6 @@ export default function KycScreen() {
 
   function validateStep2(): boolean {
     const errs: Record<string, string> = {}
-    if (!bvnProfile?.nin || !/^\d{11}$/.test(idNumber)) {
-      errs.idNumber = 'Your BVN record has no NIN attached. Link your NIN to your BVN at your bank, then try again. You can also contact support.'
-    }
     if (bankName.trim().length < 2) errs.bankName = 'Select your settlement bank'
     if (!/^\d{10}$/.test(accountNumber)) errs.accountNumber = 'Account number must be 10 digits'
     if (accountName.trim().length < 2) errs.accountName = 'Enter the name on the account'
@@ -347,12 +330,11 @@ export default function KycScreen() {
     const dobV    = validateDob(dob)
     const addrV   = validateAddress(address)
     const phoneV  = validateNigerianPhone(phone)
-    const idNumV  = validateIdNumber(idNumber)
     const bvnV    = bvnSkipped ? { ok: true, value: '' } as const : validateBvn(bvn)
 
-    const firstFail = [name, dobV, addrV, phoneV, idNumV, bvnV].find(r => !r.ok)
+    const firstFail = [name, dobV, addrV, phoneV, bvnV].find(r => !r.ok)
     if (firstFail && !firstFail.ok) { setSubmitError(firstFail.error); return }
-    if (!name.ok || !dobV.ok || !addrV.ok || !phoneV.ok || !idNumV.ok || !bvnV.ok) return
+    if (!name.ok || !dobV.ok || !addrV.ok || !phoneV.ok || !bvnV.ok) return
 
     // Settlement (bank) account — PAC form's "BANK ACCOUNT DETAILS".
     const acctName = accountName.trim()
@@ -391,9 +373,6 @@ export default function KycScreen() {
         lga_of_origin:   bvnProfile.lgaOfOrigin || null,
         title:           bvnProfile.title || null,
       } : {}
-      // NIN can come from the BVN record OR the ID fields; only write it when we
-      // have a value, so a redo without it doesn't wipe an existing NIN.
-      const ninValue = bvnProfile?.nin || (idType === 'National ID (NIN)' ? idNumV.value : '')
 
       const { error: dbError } = await supabase.from('profiles').upsert({
         id: user.id,
@@ -401,8 +380,6 @@ export default function KycScreen() {
         date_of_birth: dobV.value,
         address: addrV.value,
         phone: phoneV.value,
-        id_type: idType,
-        id_number: idNumV.value,
         kyc_status: 'submitted',
         // Verification selfie (Storage path) — shown on the partner dashboard.
         selfie_path: selfiePath,
@@ -414,9 +391,8 @@ export default function KycScreen() {
         next_of_kin_name:   nextOfKinName.trim(),
         next_of_kin_phone:  nextOfKinPhone.trim(),
         mother_maiden_name: motherMaidenName.trim(),
-        // Only overwrite BVN / NIN when actually provided this run.
+        // Only overwrite the BVN when actually provided this run.
         ...(bvnV.value ? { bvn: bvnV.value } : {}),
-        ...(ninValue ? { nin: ninValue } : {}),
         ...bvnFields,
       })
       if (dbError) throw new Error(dbError.message)
@@ -428,8 +404,6 @@ export default function KycScreen() {
         bvn:      bvnV.value,
         dob:      dobV.value,
         address:  addrV.value,
-        idType,
-        idNumber: idNumV.value,
       })
 
       // Identity is verified and the broker account exists, but the CSCS
@@ -598,21 +572,6 @@ export default function KycScreen() {
             {/* ───────────────────────── STEP 2 ───────────────────────── */}
             {step === 2 && (
               <View>
-                {/* ID = NIN from the verified BVN record. Read-only. */}
-                <UField
-                  label="National ID number (NIN)"
-                  value={idNumber}
-                  onChangeText={() => {}}
-                  editable={false}
-                  placeholder="From your BVN record"
-                  big
-                  error={fieldErr.idNumber}
-                  trailing={idNumber ? <Icon name="solar:lock-keyhole-bold" size={20} color={colors.textMuted} /> : undefined}
-                />
-                <Text variant="small" tone="muted" style={{ marginTop: -spacing.md, marginBottom: spacing.md }}>
-                  Taken from your BVN record. It can’t be changed here.
-                </Text>
-
                 <Divider label="Settlement bank account" />
                 <View style={styles.uploadNote()}>
                   <Icon name="solar:info-circle-linear" size={18} color={colors.textMuted} />
@@ -736,7 +695,6 @@ export default function KycScreen() {
                   {bvnProfile?.stateOfOrigin ? <ReviewRow label="State of origin" value={bvnProfile.stateOfOrigin} /> : null}
                   {bvnProfile?.lgaOfOrigin ?   <ReviewRow label="LGA of origin" value={bvnProfile.lgaOfOrigin} /> : null}
                   <ReviewRow label="BVN" value={bvn ? `••••••${bvn.slice(-3)}` : 'Not provided'} />
-                  <ReviewRow label="NIN" value={idNumber ? `•••••••${idNumber.slice(-4)}` : '-'} />
                   <ReviewRow label="Settlement bank" value={bankName} />
                   <ReviewRow label="Account number" value={accountNumber} />
                   <ReviewRow label="Account name" value={accountName} />

@@ -675,8 +675,6 @@ export async function createBrokerAccount(details: {
   bvn?:      string
   dob?:      string
   address?:  string
-  idType?:   string
-  idNumber?: string
 }): Promise<string> {
   const mobileNo = details.phone.replace(/\D/g, '')
   const clientId  = '019e2ad4-e669-7777-8969-52a5edeac77b'

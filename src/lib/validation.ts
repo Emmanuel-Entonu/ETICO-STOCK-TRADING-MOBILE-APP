@@ -95,12 +95,6 @@ export function validateBvn(raw: string): ValidResult<string> {
   return { ok: true, value: v }
 }
 
-export function validateNin(raw: string): ValidResult<string> {
-  const v = normalizeDigits(raw, 11)
-  if (v.length !== 11) return { ok: false, error: 'NIN must be exactly 11 digits' }
-  return { ok: true, value: v }
-}
-
 export function validateOtp(raw: string, len = 6): ValidResult<string> {
   const v = normalizeDigits(raw, len)
   if (v.length !== len) return { ok: false, error: `Enter the ${len}-digit code` }
@@ -135,12 +129,6 @@ export function validateDob(raw: string): ValidResult<string> {
 export function validateAddress(raw: string): ValidResult<string> {
   const v = normalizeText(raw, 255)
   if (v.length < 5) return { ok: false, error: 'Enter a full address' }
-  return { ok: true, value: v }
-}
-
-export function validateIdNumber(raw: string): ValidResult<string> {
-  const v = normalizeAlphaNum(raw, 50)
-  if (v.length < 4) return { ok: false, error: 'ID number is too short' }
   return { ok: true, value: v }
 }
 

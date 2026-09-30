@@ -279,7 +279,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Pull the KYC identity we already collected to create the VA.
         const { data: p } = await supabase
           .from('profiles')
-          .select('full_name, first_name, surname, nin, bvn, id_type, id_number, va_reference')
+          .select('full_name, first_name, surname, bvn, va_reference')
           .eq('id', user.id)
           .single()
 
@@ -296,14 +296,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Moneta VA validation quirks:
         //  • account_name must be <= 8 characters (it's just a label; Moneta wraps
         //    it as "MONETA TECH(<merchant>-<account_name>)"), so cap it.
-        //  • bvn must be exactly 11 digits, nin exactly 10 digits — real Nigerian
-        //    NINs are 11 digits, which Moneta rejects, so fall back to the
-        //    documented sandbox value unless we have a genuine 10-digit one.
+        //  • bvn must be exactly 11 digits.
+        //  • nin is required by the payload (exactly 10 digits). We don't collect
+        //    NIN, so it's always the documented placeholder.
         const accountName = (firstName || surname).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'User'
         const rawBvn = String(p?.bvn ?? '').replace(/\D/g, '')
         const bvn = /^\d{11}$/.test(rawBvn) ? rawBvn : '00000000000'
-        const rawNin = (String(p?.nin ?? '') || (p?.id_type === 'National ID (NIN)' ? String(p?.id_number ?? '') : '')).replace(/\D/g, '')
-        const nin = /^\d{10}$/.test(rawNin) ? rawNin : '0000000000'
+        const nin = '0000000000'
 
         const va = await createVirtualAccount({
           accountName,
