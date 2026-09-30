@@ -10,7 +10,7 @@ import { naira } from '@/lib/format'
 import { isOpen, totalFor, unitPrice, unitsHeld, subscriptionStatus } from '@/lib/eventsApi'
 import { useEventsStore } from '@/store/eventsStore'
 import { useAuthStore } from '@/store/authStore'
-import { EventLogo, EventHero } from '@/components/EventBanner'
+import { EventLogo } from '@/components/EventBanner'
 import { supabase } from '@/lib/supabase'
 import { TransactionPinModal } from '@/components/TransactionPinModal'
 
@@ -121,8 +121,6 @@ export default function EventScreen() {
         contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing['3xl'], gap: spacing.lg }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { load(); loadProfile() }} tintColor={colors.brand} />}
       >
-        <EventHero event={event} />
-
         {/* Offer card (modelled on PAC's public-offers card) */}
         <View style={{ padding: spacing.lg, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>

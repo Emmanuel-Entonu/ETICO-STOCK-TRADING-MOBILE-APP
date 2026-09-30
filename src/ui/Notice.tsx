@@ -42,6 +42,7 @@ export function Notice({
   const t = TONES[tone]
   const fg = t.fg()
   const content = (
+    <View>
     <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' }}>
       <View style={{ width: 36, height: 36, borderRadius: radii.md, backgroundColor: t.bg(), alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon ?? t.icon} size={20} color={fg} />
@@ -50,14 +51,16 @@ export function Notice({
         <Text variant="bodyStrong">{title}</Text>
         {body ? <Text variant="small" tone="muted" style={{ marginTop: 3, lineHeight: 19 }}>{body}</Text> : null}
         {children ? <View style={{ marginTop: spacing.md }}>{children}</View> : null}
-        {action ? (
-          // Compact, right-aligned: a card's action shouldn't dominate the screen.
-          <View style={{ marginTop: spacing.md, alignItems: 'flex-end' }}>
-            <Button title={action.label} onPress={action.onPress} size="sm" fullWidth={false} style={{ alignSelf: 'flex-end' }} />
-          </View>
-        ) : null}
       </View>
       {onPress && !action ? <Icon name="solar:alt-arrow-right-linear" size={18} color={colors.textMuted} /> : null}
+    </View>
+    {action ? (
+      // Compact and centred across the whole card: a card's action shouldn't
+      // dominate the screen.
+      <View style={{ marginTop: spacing.md, alignItems: 'center' }}>
+        <Button title={action.label} onPress={action.onPress} size="sm" fullWidth={false} />
+      </View>
+    ) : null}
     </View>
   )
   const card = {
