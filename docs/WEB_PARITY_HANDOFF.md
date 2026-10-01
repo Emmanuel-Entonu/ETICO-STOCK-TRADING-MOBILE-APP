@@ -6,6 +6,10 @@
 > `moneta-app-ten.vercel.app`. Nothing here is web-specific unless called out.
 > **Do not move this file into the web repo yet** — it lives in the mobile repo's
 > `docs/` for now.
+>
+> **Update 2026-10-01:** web is at parity for everything below plus Events/IPO and the NIN removal
+> (KYC step 2 is now the settlement account only — no NIN/ID field anywhere). Latest state:
+> [`SESSION_2026-10-01_HANDOFF.md`](SESSION_2026-10-01_HANDOFF.md).
 
 ---
 
@@ -50,7 +54,7 @@ Do **not** display the raw Moneta VA balance — Providus sweeps it, so it reads
 
 ## 3. KYC — now 4 steps (Step 4 = photo)
 
-Steps: (1) BVN + personal details, (2) ID + **settlement bank account**, (3) review, (4) **verification photo**.
+Steps: (1) BVN + personal details, (2) **settlement bank account** (the ID/NIN field was removed 2026-10-01), (3) review, (4) **verification photo**.
 
 ### Storage + column (already applied — `supabase/kyc-selfie.sql`)
 - Private bucket **`kyc-selfies`**, object path **`<user_id>/selfie.jpg`**.

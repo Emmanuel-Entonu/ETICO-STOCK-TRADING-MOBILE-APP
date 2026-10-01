@@ -4,6 +4,10 @@
 > ETICO system, where each project lives, how they fit together, and the things
 > you must know before changing anything. **No secrets in this file** (it's in a
 > public repo) — it only says *where* secrets live.
+>
+> **Latest session (2026-09-29 → 10-01): read [`docs/SESSION_2026-10-01_HANDOFF.md`](docs/SESSION_2026-10-01_HANDOFF.md) first** —
+> open incidents (Moneta `app.moneta.ng` ~21 s latency breaking all VA features, PAC trading-account
+> linking blocked on a PAC role), SQL still to run, Events/IPO, NIN removal, and how to test the Moneta VA services.
 
 ETICO is a mobile + web brokerage for **ethically screened stocks on the Nigerian
 Exchange (NGX)**, by **Moneta Capital Investment Limited** (a subsidiary of Moneta
@@ -48,7 +52,7 @@ a wallet, and buy/sell from a curated ethical universe.
 ## 3. Core features / how they work
 
 - **Auth + PIN:** email/password (Supabase). A 6-digit transaction **PIN** (server-side bcrypt via `set_pin`/`verify_pin` RPCs; `profiles.has_pin`). Onboarding order: create PIN → enter PIN → KYC → app (gate logic in `app/_layout.tsx` `AuthGate`).
-- **KYC:** BVN + OTP via NIBSS (`src/lib/nibssApi.ts`), ID type/number, and a **settlement bank account** (name / 10-digit number / bank). Creates a PAC brokerage account (`createBrokerAccount`). Sets `kyc_status='verified'`, `cacs_status='pending'`. `app/(auth)/kyc.tsx`.
+- **KYC:** BVN + OTP via NIBSS (`src/lib/nibssApi.ts`), a **settlement bank account** (name / 10-digit number / bank), next of kin, and a verification selfie. **No NIN / ID number is collected any more (removed 2026-10-01)** — the Moneta VA create payload still carries `nin` = placeholder `0000000000`. Creates a PAC brokerage account (`createBrokerAccount`). Sets `kyc_status='verified'`, `cacs_status='pending'`. `app/(auth)/kyc.tsx`.
 - **CSCS review + partner dashboard:** a PAC reviewer approves/rejects on the **web** partner dashboard (`Niqra-web/src/app/partner`). `cacs_status`: `not_submitted → pending → approved | rejected`. Trading is gated on `cacs_status === 'approved'`. Rejections show reasons + "Redo KYC" (`src/components/CscsNotice.tsx`).
 - **Wallet & funding (CURRENT model — updated 2026-09).** ⚠️ The old "master float" write-up is **wrong** — see corrected model below and `supabase/va-wallet-separation.sql`. Two distinct balances:
   1. **Trading Wallet** = the user's **live PAC account cash balance** (buying power), read straight from PAC via `getAccountById()` and mirrored into `authStore.walletBalance`. It is **not** a stored ledger. Buys/sells re-read PAC.
@@ -60,6 +64,8 @@ a wallet, and buy/sell from a curated ethical universe.
   - **Funding is its own pop-up page** — `app/fund-wallet.tsx`, registered in `app/_layout.tsx` as `presentation:'modal'`. Flow: pick amount → **awaits the MyWealthCare (PAC) response end-to-end** → shows a "Sent" success state → **auto-returns to the wallet** (~1.2s) with a toast *"your wallet balance will update shortly"* (covers the PAC-balance lag). On failure it **masks the raw PAC/proxy error** behind a generic "try again" message (real error → console only). The old inline fund `<Modal>` was removed.
   - **VA + VA history route through the static IP:** all Moneta VA calls (`create`/`balance`/`transactions`) go through `moneta-va.ts` → the Fly static-IP proxy (`moneta-proxy.fly.dev/nibss-app/api/v1` → `app.moneta.ng`). The `transactions` action resolves the caller's VA reference from their **JWT server-side** (never client-supplied), so a user can only read their own history.
   - **Payouts/withdrawals = NEXT step** (not built): pay `wallet`/settlement out to the user's settlement bank account; `va_ledger` already has a `payout` type and `va_debit` accepts `payout` for it.
+- **Events / IPOs (2026-09-29+):** Events card on Assets → events list → event page (`app/events/*`, web `/app/events`). Subscribe moves money VA→VA to the event's collection VA (`moneta-va` `ipo-subscribe`, DB-enforced eligibility + lots via `event_subscribe` RPC). Dangote IPO: ₦525/share, min 10, multiples of 10, no cap. Partner view: web `/partner/events/[id]`. Details: `docs/SESSION_2026-10-01_HANDOFF.md` §1.
+- **PAC trading account (CSCS/CHN) linking:** PAC leaves investment accounts without a trading account, so orders fail "No trading account number found". `reconcile-funding` `linkTradingAccount` attaches CSCS no. + CHN, but PAC currently returns **403** (our PAC user lacks `investment_account_update`). See session handoff §0.3.
 - **Trading:** `app/trade/[symbol].tsx` — buy/sell via PAC (`src/lib/pacApi.ts`), per-trade SEC legal disclosure, PIN confirm. Buying power = the live PAC wallet balance; after a fill it calls `refreshWalletBalance()`.
 - **Market / Assets / Watchlist / Portfolio:** ethical universe in `src/lib/ethicalTickers.ts`; watchlist is DB-backed (`user_watchlists`, shared with web); Assets page uses image cards (`app/(app)/invest.tsx`).
 - **Legal (in-app):** Privacy/Terms render natively (`src/lib/legalContent.ts`, `app/privacy.tsx`, `app/terms.tsx`, `app/legal.tsx`); mirrored at etico.ng and in `docs/`. Risk Disclosure links out.
@@ -103,7 +109,7 @@ a wallet, and buy/sell from a curated ethical universe.
 ### 5B. Environment variables (names only — values live in Vercel / EAS / gitignored files)
 
 **Vercel proxy** (`Moneta-stock trading Demo`, set in Vercel project env; redeploy to apply):
-`CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_ANON_KEY`, `SELF_BASE`, `FIXIE_URL` / `HTTPS_PROXY` (static egress IP), `VITE_BROKER_BASE_URL`, `VITE_PAC_TENANT_ID`, `VITE_PAC_USERNAME`, `VITE_PAC_PASSWORD`, `MDS_API_KEY`, `MDS_TENANT_ID`, `MONETA_PROXY_URL`, `MONETA_CLIENT_ID`, `MONETA_CLIENT_SECRET`, `MONETA_ONBOARD_CLIENT_ID`, `MONETA_ONBOARD_CLIENT_SECRET`, `VITE_MONETA_CLIENT_ID`, `VITE_MONETA_CLIENT_SECRET`, `VITE_MONETA_SERVICE_KEY`, `VITE_MONETA_NIBSS_TOKEN`, `LOGODEV_TOKEN`. (`CRON_SECRET` was rotated 2026-09-19.)
+`CRON_SECRET`, `EMAIL_SEND_SECRET` (web↔proxy internal secret), `MONETA_EMAIL_CLIENT_ID/SECRET/SERVICE_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_ANON_KEY`, `SELF_BASE`, `FIXIE_URL` / `HTTPS_PROXY` (static egress IP), `VITE_BROKER_BASE_URL`, `VITE_PAC_TENANT_ID`, `VITE_PAC_USERNAME`, `VITE_PAC_PASSWORD`, `MDS_API_KEY`, `MDS_TENANT_ID`, `MONETA_PROXY_URL`, `MONETA_CLIENT_ID`, `MONETA_CLIENT_SECRET`, `MONETA_ONBOARD_CLIENT_ID`, `MONETA_ONBOARD_CLIENT_SECRET`, `VITE_MONETA_CLIENT_ID`, `VITE_MONETA_CLIENT_SECRET`, `VITE_MONETA_SERVICE_KEY`, `VITE_MONETA_NIBSS_TOKEN`, `LOGODEV_TOKEN`. (`CRON_SECRET` was rotated 2026-09-19.)
 
 **Mobile app** (public config; set in EAS build env / `eas.json` env, `.env` for local, compiled fallbacks in `src/lib/config.ts`): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_PROXY_BASE`, `EXPO_PUBLIC_SITE_BASE`, `EXPO_PUBLIC_EAS_PROJECT_ID`. **No secrets** — anon key is RLS-safe, proxy URL is public.
 
@@ -116,6 +122,8 @@ a wallet, and buy/sell from a curated ethical universe.
 ---
 
 ## 6. Recent fixes (this + prior sessions)
+
+**Session 2026-09-29 → 10-01:** Events/Dangote IPO end-to-end (first real ₦525 subscription settled), lots min 10 × 10, NIN removed everywhere, PAC trading-account linking (blocked on PAC role), Fixie quota incident (upgraded), Moneta `app.moneta.ng` latency incident (open). Full write-up + test method: [`docs/SESSION_2026-10-01_HANDOFF.md`](docs/SESSION_2026-10-01_HANDOFF.md).
 
 **Session 2026-09-21 — funding went live + verified end-to-end:**
 - **The VA/wallet-separation server side was never deployed** — `api/fund-wallet.ts` was untracked (404 in prod) and `api/reconcile-funding.ts`'s new-model version was uncommitted (prod still ran the old `wallet_balance` reconciler). Committed + pushed to `moneta-app` `main` so git auto-deploy serves them: **`/api/fund-wallet`** (VA→PAC funding), **new `reconcile-funding`** (credits `va_available` via `va_reconcile_deposit`), and a new **`moneta-va` `transactions`** action (Moneta `transaction-histories`). `fund-wallet` also now emits a valid RFC-4122 **v4** idempotency UUID (the sha256-slice wasn't valid v4).
@@ -143,6 +151,8 @@ a wallet, and buy/sell from a curated ethical universe.
 ## 7. Gotchas / conventions
 
 - **Commits: do NOT add a Co-Authored-By / AI attribution trailer** (owner's standing instruction).
+- **Pull before pushing** — several people push to `main`.
+- **Make every change on both mobile and web**, and test against the deployed backend (not locally) — owner's standing instructions.
 - Keep secrets out of the app bundle and out of git (keystore, `keystore.properties`, `google-services.json`, service-role key, FCM key all gitignored).
 - Cross-app doc for the web team: `Niqra-web/KYC_FIXES_FROM_MOBILE.md` (KYC fixes to mirror). ⚠️ `Niqra-web/MONETA_WALLET_SYSTEM.md` describes the **old "master float" model and is OUTDATED** — the current model is §3 above + `supabase/va-wallet-separation.sql`; update that doc before the web team follows it.
 - Legal placeholders still to fill before launch: `{{RC-NUMBER}}`, `{{REGISTERED-ADDRESS}}`, `{{SEC-LICENCE}}` (in `docs/`, `src/lib/legalContent.ts`, and etico.ng pages).

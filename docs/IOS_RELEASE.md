@@ -14,7 +14,7 @@ that work, and the traps that have already cost time. Companion to [`../HANDOFF.
 | **App Store** | **1.0.0 is live** ("Ready for Distribution"), built from build **15**. Availability: **Nigeria only**. Free. |
 | **Next update** | **1.0.1 = build 18** (latest `main`, incl. Events/Dangote IPO, NIN removal). Uploaded to App Store Connect 2026-10-01. **To do:** App Store Connect → `+` next to *iOS App* → version `1.0.1` → *What's New* → Build `18` → Add for Review → Submit. |
 | **TestFlight** | Public link: <https://testflight.apple.com/join/7rJcpHb9> (beta group **"ETICO Testers"**). Every new build must pass Apple's *beta* review before external testers get it (usually a few hours). |
-| **Pending** | Run the NIN-drop SQL only **after** 1.0.1 has rolled out (older builds still write those columns). iOS remote push (APNs key in EAS) not yet verified on a device. Sign in with Apple must keep working (required because Google/Facebook/LinkedIn sign-in exist). |
+| **Pending** | Run the NIN-drop SQL (`supabase/remove-nin-2026-09-30.sql`) only **after** 1.0.1 has rolled out (older builds still write those columns). Build 18 has the Events lot picker (min 10, steps of 10) — it needs `supabase/events-ipo-lots-2026-09-30.sql` run (builds ≤17 step by 1; the server still enforces the rule). Open incidents (Moneta VA latency, PAC trading-account linking): see [`SESSION_2026-10-01_HANDOFF.md`](SESSION_2026-10-01_HANDOFF.md). iOS remote push (APNs key in EAS) not yet verified on a device. Sign in with Apple must keep working (required because Google/Facebook/LinkedIn sign-in exist). |
 
 ---
 
