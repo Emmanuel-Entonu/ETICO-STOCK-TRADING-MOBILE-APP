@@ -81,6 +81,8 @@ a wallet, and buy/sell from a curated ethical universe.
 
 ## 5. Build & release (current state — updated 2026-09)
 
+> **iOS build, TestFlight & App Store release:** see [`docs/IOS_RELEASE.md`](docs/IOS_RELEASE.md) — current release state, where signing/API secrets live, the release recipe, and known traps.
+
 - **Expo SDK 57 / RN 0.86 / React 19**, **New Architecture ON** (required by reanimated 4). `android/` **has been regenerated for SDK 57** via `expo prebuild` and committed. `ios/` is committed (prebuilt on the Mac).
 - **All native customizations are now Expo config plugins** so `prebuild` never loses them — `plugins/withEticoNative.js` (local plugin) re-applies: **FLAG_SECURE + the native privacy overlay** (MainActivity), **dark-mode transparent system bars** (`light_system_bars` bools + `windowBg` colors + AppTheme items), **release signing** from `android/keystore.properties`, **permission strips** (`tools:node="remove"` for SYSTEM_ALERT_WINDOW + external storage), **lint-off** on release (react-native-screens lint OOMs), and a **Gradle heap bump**. Registered in `app.json` `plugins` alongside `expo-build-properties`.
 - **`app.json`** holds the build config that used to be hand-edited native: `android.versionCode`, `android.allowBackup:false`, and `expo-build-properties` → `compileSdkVersion 36`, `targetSdkVersion 36`, **`minSdkVersion 24`** (RN 0.86 native libs require 24 — 23 fails the C++ build).
