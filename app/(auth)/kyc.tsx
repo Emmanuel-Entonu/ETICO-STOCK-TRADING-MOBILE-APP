@@ -226,7 +226,7 @@ export default function KycScreen() {
 
   useEffect(() => {
     if (!bvnRef) { setOtpWaitSec(0); return }
-    const readyAt = Date.now() + 5000
+    const readyAt = Date.now() + 35_000   // lock the OTP input for 35s after it's sent (matches web)
     const tick = () => setOtpWaitSec(Math.max(0, Math.ceil((readyAt - Date.now()) / 1000)))
     tick()
     const id = setInterval(tick, 1000)
@@ -537,7 +537,7 @@ export default function KycScreen() {
                     <Row2 label={otpWaitSec > 0 ? `Code sent. Ready in ${otpWaitSec}s` : 'Enter the 6-digit code sent to your BVN phone'} />
                     <OtpBoxes
                       value={otp}
-                      disabled={otpLoading}
+                      disabled={otpLoading || otpWaitSec > 0}
                       error={!!bvnError}
                       onChange={setOtp}
                       onComplete={(code) => verifyOtp(code)}
