@@ -131,6 +131,15 @@ function) or an external cron hitting `POST /api/reconcile-funding?commit=1` wit
 
 ---
 
+### Web (Niqra-web) — also see `Niqra-web/docs/HANDOFF_2026-10-01.md`
+- Everything above mirrored on web (Events/IPO, lots, NIN removal, PDF photo fix, centred CTAs,
+  green buttons, beams 30°), plus partner-dashboard work (IPO page, CHN, PAC link on approval).
+- **2026-10-01 launch perf + mobile fixes** (`0af4173`, `5b91542`): Lenis smooth-scroll removed,
+  hero self-hosted WebP, landing statically generated + edge-cached (5 min), Supabase/ogl/LiquidChrome
+  lazy-loaded, Beams + LineWaves pause off-screen; wallet balance/button stack on phones, account
+  number not squeezed, menus lock page scroll. Landing JS 1258 KB → 957 KB.
+- Web Events/IPO handoff updated: `Niqra-web/docs/HANDOFF_EVENTS_IPO.md`.
+
 ## 2. Owner's working rules (follow these)
 - **Every change on BOTH mobile and web** unless told otherwise.
 - **Test against our backend, not locally** (call `moneta-app-ten.vercel.app` endpoints the way the apps
