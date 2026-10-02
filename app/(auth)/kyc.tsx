@@ -273,6 +273,14 @@ export default function KycScreen() {
     }
   }
 
+  // Details the verified BVN supplied are read-only (only the fields it
+  // actually returned; anything missing stays editable so KYC isn't blocked).
+  const lockName    = bvnDone && !!(bvnProfile?.firstName || bvnProfile?.surname)
+  const lockDob     = bvnDone && !!bvnProfile?.dob
+  const lockAddress = bvnDone && !!bvnProfile?.address
+  const lockPhone   = bvnDone && !!bvnProfile?.phone
+  const bvnLockIcon = <Icon name="solar:lock-keyhole-bold" size={16} color={colors.textMuted} />
+
   function resetBvn() {
     setBvnDone(false); setBvnRef(null); setOtp(''); setBvnError(null)
   }
@@ -560,10 +568,10 @@ export default function KycScreen() {
                 {(bvnDone || bvnSkipped) && (
                   <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 320 }}>
                     <Divider label="Your details" />
-                    <UField label="Full name" value={fullName} onChangeText={(v: string) => { setFullName(v); clearErr('fullName') }} placeholder="Your full name" autoCapitalize="words" error={fieldErr.fullName} />
-                    <UField label="Date of birth" value={dob} onChangeText={(v: string) => { setDob(formatDobInput(v)); clearErr('dob') }} placeholder="YYYY-MM-DD" keyboardType="number-pad" maxLength={10} error={fieldErr.dob} />
-                    <UField label="Residential address" value={address} onChangeText={(v: string) => { setAddress(v); clearErr('address') }} placeholder="Where you live" autoCapitalize="words" error={fieldErr.address} />
-                    <UField label="Phone number" value={phone} onChangeText={(v: string) => { setPhone(v); clearErr('phone') }} placeholder="e.g. 08012345678" keyboardType="phone-pad" autoComplete="tel" error={fieldErr.phone} />
+                    <UField label="Full name" value={fullName} onChangeText={(v: string) => { setFullName(v); clearErr('fullName') }} placeholder="Your full name" autoCapitalize="words" error={fieldErr.fullName} editable={!lockName} trailing={lockName ? bvnLockIcon : null} />
+                    <UField label="Date of birth" value={dob} onChangeText={(v: string) => { setDob(formatDobInput(v)); clearErr('dob') }} placeholder="YYYY-MM-DD" keyboardType="number-pad" maxLength={10} error={fieldErr.dob} editable={!lockDob} trailing={lockDob ? bvnLockIcon : null} />
+                    <UField label="Residential address" value={address} onChangeText={(v: string) => { setAddress(v); clearErr('address') }} placeholder="Where you live" autoCapitalize="words" error={fieldErr.address} editable={!lockAddress} trailing={lockAddress ? bvnLockIcon : null} />
+                    <UField label="Phone number" value={phone} onChangeText={(v: string) => { setPhone(v); clearErr('phone') }} placeholder="e.g. 08012345678" keyboardType="phone-pad" autoComplete="tel" error={fieldErr.phone} editable={!lockPhone} trailing={lockPhone ? bvnLockIcon : null} />
                   </MotiView>
                 )}
               </View>
