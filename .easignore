@@ -13,3 +13,14 @@ ios/
 **/*.keystore
 android/keystore.properties
 *.log
+# Large local media (not used by the app) — kept out of every build upload.
+niqra-screen-recording.mp4
+screen.png
+*.mp4
+# Local signing secrets: EAS reads credentials.json from disk and uploads the
+# keystore through its credentials flow; the source archive must not carry them.
+credentials.json
+credentials/
+*.p8
+*.p12
+*.mobileprovision
