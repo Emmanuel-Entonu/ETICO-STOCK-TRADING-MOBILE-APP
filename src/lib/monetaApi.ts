@@ -129,13 +129,20 @@ export async function syncWalletFunding(): Promise<void> {
 // trading wallet. Server-authoritative: it reserves from va_available, fires the
 // cash_transactions DEPOSIT to PAC, and writes the va_ledger. Returns the new
 // va_available on success; throws with a readable message otherwise.
+// The backend could not confirm the outcome with the broker (timeout etc.): the
+// money may already be on its way, so the user must NOT retry. Shown as such.
+export class FundingPendingError extends Error {
+  constructor(message: string) { super(message); this.name = 'FundingPendingError' }
+}
+
 export async function fundWalletFromVa(amountNaira: number): Promise<{ vaAvailable: number }> {
   const res = await fetch(`${config.proxyBase}/api/fund-wallet`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
     body: JSON.stringify({ amount: amountNaira }),
   })
-  const raw = await parseJson(res) as { ok?: boolean; vaAvailable?: number; error?: string }
+  const raw = await parseJson(res) as { ok?: boolean; pending?: boolean; vaAvailable?: number; error?: string }
+  if (res.status === 202 && raw.pending) throw new FundingPendingError(String(raw.error ?? 'Funding is being confirmed.'))
   if (!res.ok || raw.ok !== true) {
     throw new Error(String(raw.error ?? `Could not fund wallet (${res.status})`))
   }

@@ -62,6 +62,7 @@ export default function WalletScreen() {
   const [error, setError] = useState<string | null>(null)
   const [ledger, setLedger] = useState<LedgerRow[]>([])
   const [vaTx, setVaTx] = useState<VaTransaction[]>([])
+  const [vaTxFailed, setVaTxFailed] = useState(false)
   const [activityTab, setActivityTab] = useState<'deposits' | 'moves'>('deposits')
 
   const kycDone = kycStatus === 'verified' || kycStatus === 'submitted'
@@ -83,8 +84,8 @@ export default function WalletScreen() {
   // Real Moneta VA transaction history (bank credits/debits into the VA).
   // Best-effort — a failure here shouldn't blank the rest of the wallet.
   const loadVaTx = useCallback(async () => {
-    try { setVaTx(await getVaTransactions()) }
-    catch (e) { console.warn('[wallet] VA transactions load failed:', (e as Error).message) }
+    try { setVaTx(await getVaTransactions()); setVaTxFailed(false) }
+    catch (e) { setVaTxFailed(true); console.warn('[wallet] VA transactions load failed:', (e as Error).message) }
   }, [])
 
   // Pull everything fresh: detect new VA deposits (credits va_available), then
@@ -304,9 +305,9 @@ export default function WalletScreen() {
               vaTx.length === 0 ? (
                 <View style={styles.emptyLedger}>
                   <Icon name="solar:clock-circle-linear" size={22} color={colors.textMuted} />
-                  <Text variant="small" tone="muted" style={{ marginTop: spacing.sm }}>No deposits yet</Text>
+                  <Text variant="small" tone="muted" style={{ marginTop: spacing.sm }}>{vaTxFailed ? "Couldn't load deposits" : 'No deposits yet'}</Text>
                   <Text variant="small" tone="subtle" align="center" style={{ marginTop: spacing.xs, paddingHorizontal: spacing.lg }}>
-                    Transfers into your wallet show up here.
+                    {vaTxFailed ? 'Pull down to try again. Your money is safe.' : 'Transfers into your wallet show up here.'}
                   </Text>
                 </View>
               ) : (

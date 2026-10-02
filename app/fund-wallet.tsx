@@ -66,7 +66,10 @@ export default function FundWalletScreen() {
       // Mask the raw error — never surface PAC/proxy internals to the user.
       console.warn('[fund-wallet] failed:', (e as Error).message)
       setPhase('input')
-      setErrMsg("We couldn't complete that right now. Please try again in a moment.")
+      setErrMsg((e as Error).name === 'FundingPendingError'
+        // Outcome unknown: the money may already be moving. Never invite a retry.
+        ? "Your transfer is being confirmed. Your balance will update shortly, so please don't send it again."
+        : "We couldn't complete that right now. Please try again in a moment.")
     }
   }
 
