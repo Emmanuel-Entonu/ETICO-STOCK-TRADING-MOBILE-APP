@@ -89,9 +89,14 @@ export default function WalletScreen() {
 
   // Pull everything fresh: detect new VA deposits (credits va_available), then
   // read va_available + the live PAC wallet balance + both activity feeds.
+  // The deposit sync can take 20-45s while Moneta is slow, so it no longer
+  // blocks the screen: everything loads at once, and va_available is re-read
+  // again when the sync finishes (it may have credited a new deposit).
   const syncAll = useCallback(async () => {
-    await syncWalletFunding()               // server credits va_available on new deposits
-    await Promise.all([refreshVaAvailable(), refreshWalletBalance(), loadLedger(), loadVaTx()])
+    await Promise.all([
+      refreshVaAvailable(), refreshWalletBalance(), loadLedger(), loadVaTx(),
+      syncWalletFunding().then(() => refreshVaAvailable()),
+    ])
   }, [refreshVaAvailable, refreshWalletBalance, loadLedger, loadVaTx])
 
   const provision = useCallback(async () => {
