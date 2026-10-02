@@ -5,7 +5,11 @@
 > you must know before changing anything. **No secrets in this file** (it's in a
 > public repo) — it only says *where* secrets live.
 >
-> **Latest session (2026-09-29 → 10-01): read [`docs/SESSION_2026-10-01_HANDOFF.md`](docs/SESSION_2026-10-01_HANDOFF.md) first** —
+> **Latest session (2026-10-01 → 10-02, launch day): read [`docs/SESSION_2026-10-02_HANDOFF.md`](docs/SESSION_2026-10-02_HANDOFF.md) first** —
+> the shared-₦796 wallet incident (Fly proxy dropped the query string) and its fixes, the Fly egress IP
+> warning, shared Moneta tokens, SQL status, and open items.
+>
+> Previous session (2026-09-29 → 10-01): [`docs/SESSION_2026-10-01_HANDOFF.md`](docs/SESSION_2026-10-01_HANDOFF.md) —
 > open incidents (Moneta `app.moneta.ng` ~21 s latency breaking all VA features, PAC trading-account
 > linking blocked on a PAC role), SQL still to run, Events/IPO, NIN removal, and how to test the Moneta VA services.
 
